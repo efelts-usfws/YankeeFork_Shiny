@@ -103,6 +103,10 @@ ui <- page_navbar(
                 
                 card(card_header("Year-to-date Totals"),
                      plotlyOutput("comp_plot"),
+                     full_screen = T),
+                
+                card(card_header("Unique Fish In"),
+                     plotlyOutput("entry_plot"),
                      full_screen = T)
                 
                 
@@ -150,6 +154,27 @@ server <- function(input,output,session){
     
   })
   
+    # make the plot for daily numbers of pit tags entering
+  
+  dailyentry_reactive <- reactive({
+    
+    plot_min <- min(input$user_dates)
+    plot_max <- max(input$user_dates)
+    
+    entry.plot <- ggplot()+
+      geom_col(data=daily.dat,fill="black",color="grey",
+               aes(x=sf_final_date,y=n,group=spawn_year,
+                   text=str_c(" Date:",sf_final_date,
+                              "<br>","Number Steelhead Entered:",n,
+                              sep=" ")))+
+      scale_x_date(date_breaks = "1 month", date_labels="%b",
+                   limits=c(as.Date(plot_min),as.Date(plot_max)))+
+      theme_bw()+
+      labs(x="Latest entry date to SF Clearwater",
+           y="Number of unique PIT-Tagged Steelhead")
+    
+  })
+  
   # make a reactive plot of cumulative
   # numbers in; this is named comp plot bc
   # eventually it will compare the cumulative
@@ -184,6 +209,38 @@ server <- function(input,output,session){
     
     ggplotly(plot1,
              tooltip=c("text")) 
+    
+  })
+  
+  # make the plot for daily numbers of pit tags entering
+  
+  dailyentry_reactive <- reactive({
+    
+    plot_min <- min(input$user_dates)
+    plot_max <- max(input$user_dates)
+    
+    entry.plot <- ggplot()+
+      geom_col(data=daily.dat,fill="black",color="grey",
+               aes(x=yfk_final_date,y=n,group=spawn_year,
+                   text=str_c(" Date:",yfk_final_date,
+                              "<br>","Number Steelhead Entered:",n,
+                              sep=" ")))+
+      scale_x_date(date_breaks = "1 month", date_labels="%b",
+                   limits=c(as.Date(plot_min),as.Date(plot_max)))+
+      theme_bw()+
+      labs(x="Latest entry date to Yankee Fork Salmon River",
+           y="Number of unique PIT-Tagged Steelhead")
+    
+  })
+  
+  # Render the daily tally plot as a plotly object
+  
+  output$entry_plot <- renderPlotly({
+    
+    plot1 <- dailyentry_reactive()
+    
+    ggplotly(plot1,
+             tooltip=c("text"))
     
   })
 }
