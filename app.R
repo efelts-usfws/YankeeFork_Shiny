@@ -10,6 +10,7 @@ library(arrow)
 library(dataRetrieval)
 library(bsicons)
 library(viridis)
+library(scales)
 library(fontawesome)
 
 conflicts_prefer(DT::renderDT,
@@ -39,7 +40,9 @@ user_dates <-
               label="Choose a Date Range",
               min=as_date("2025-01-01"),
               max=today(),
-              value=c(as_date("2025-01-01"),today()))
+              value=c(as_date("2025-03-15"),today()))
+
+
 
 # build user interface
 
@@ -167,9 +170,10 @@ server <- function(input,output,session){
                    text=str_c(" Date:",sf_final_date,
                               "<br>","Number Steelhead Entered:",n,
                               sep=" ")))+
-      scale_x_date(date_breaks = "1 month", date_labels="%b",
+      scale_x_date(date_breaks = "1 week", date_labels="%b %d",
                    limits=c(as.Date(plot_min),as.Date(plot_max)))+
       theme_bw()+
+      theme(axis.text.x=element_text(angle=45,hjust=1))+
       labs(x="Latest entry date to SF Clearwater",
            y="Number of unique PIT-Tagged Steelhead")
     
@@ -193,7 +197,8 @@ server <- function(input,output,session){
                                "<br>",
                                "Number In:",round(cumulative_total),sep=" ")))+
       theme_bw()+
-       scale_x_date(date_breaks = "1 month", date_labels="%b",
+      theme(axis.text.x=element_text(angle=45,hjust=1))+
+       scale_x_date(date_breaks = "1 week", date_labels="%b %d",
                     limits=c(as.Date(plot_lim.dat$min_doy),as.Date(plot_lim.dat$max_doy)))+
       labs(x="Date to Yankee Fork Salmon River",
            y="# PIT Tags in Yankee Fork, Year-To-Date",
@@ -225,9 +230,10 @@ server <- function(input,output,session){
                    text=str_c(" Date:",yfk_final_date,
                               "<br>","Number Steelhead Entered:",n,
                               sep=" ")))+
-      scale_x_date(date_breaks = "1 month", date_labels="%b",
+      scale_x_date(date_breaks = "1 week", date_labels="%b %d",
                    limits=c(as.Date(plot_min),as.Date(plot_max)))+
       theme_bw()+
+      theme(axis.text.x=element_text(angle=45,hjust=1))+
       labs(x="Latest entry date to Yankee Fork Salmon River",
            y="Number of unique PIT-Tagged Steelhead")
     
