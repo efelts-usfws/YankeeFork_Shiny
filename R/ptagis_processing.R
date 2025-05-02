@@ -6,37 +6,13 @@ library(arrow)
 library(plotly)
 library(dataRetrieval)
 library(patchwork)
+library(vroom)
+library(readxl)
 
 
 ptagis.dat <- read_feather("shapes/ptagis_sites")
 
-# just initially look at what infrastructure is
-# in the Yankee Fork
 
-ptagis.sf <- st_read(dsn="shapes",layer="ptagis_master")
-
-leaflet_base <- leaflet() %>% 
-  addProviderTiles(providers$Esri.WorldTopoMap,group="Topographic") %>% 
-  addProviderTiles(providers$Esri.WorldImagery,group="Imagery") %>% 
-  addProviderTiles(providers$OpenStreetMap.Mapnik,group="Roads") %>% 
-  addLayersControl(
-    baseGroups = c("Topographic","Imagery","Roads"),
-    options = layersControlOptions(collapsed = FALSE),
-    position="bottomright") %>% 
-  setView(lng=-114.31,lat=44.56308,zoom=8) %>% 
-  addMouseCoordinates()  
-
-leaflet_base %>% 
-  addCircleMarkers(data=ptagis.dat,
-                   lat=~latitude,
-                   lng=~longitude,
-                   popup=~str_c(site_code))
-
-
-
-leaflet_base %>% 
-  addCircleMarkers(data=ptagis.sf,
-                   popup=~str_c(site_cd))
 
 yfk_sites <- c("YFK","CEY","YANKWF","YANKFK",
                "EIGH3C")
@@ -56,9 +32,36 @@ yfk.dat <- ptagis.dat %>%
 # as juveniles that are detected in the 
 # same year as tagging
 
+dat <- read.csv("https://api.ptagis.org/reporting/reports/efelts60/file/YFK%20STHD.csv") 
+
+raw_lines <- readLines("data/YFK STHD (1).csv", encoding="UTF-16LE",
+                       skipNul=TRUE)
+
+df <- vroom(file = "https://api.ptagis.org/reporting/reports/efelts60/file/YFK%20STHD.csv",
+            delim = ",",
+            locale = locale(encoding= "UTF-16LE")) %>% 
+  mutate(observation_sitecode=word(`Site`,1,sep=" "),
+         release_sitecode=word(`Release Site`,1,sep=" "),
+         observation_datetime=as.POSIXct(`Obs Time`,
+                                         format = "%m/%d/%Y %I:%M:%S %p", 
+                                         tz = "America/Los_Angeles"),
+         observation_month=month(observation_datetime),
+         observation_year=year(observation_datetime),
+         spawn_year=ifelse(observation_month>6,(observation_year+1),
+                           observation_year),
+         release_datetime=mdy(`Release Date`),
+         release_year=year(release_datetime),
+         yrs_at_large=observation_year-release_year)
+
+test2 <- read_table("https://api.ptagis.org/reporting/reports/efelts60/file/YFK%20STHD.txt")
+
+
+
+test <- readLines("https://api.ptagis.org/reporting/reports/efelts60/file/YFK%20STHD.csv", warn = FALSE)
+
 # once that part is done, read in the output here
 
-dat <- read_csv("data/YFK STHD.csv")%>% 
+dat <- read_csv("data/YFK STHD.csv")#%>% 
   mutate(observation_sitecode=word(`Site Name`,1,sep=" "),
          release_sitecode=word(`Release Site Name`,1,sep=" "),
          observation_datetime=as.POSIXct(`Obs Time Value`,
@@ -85,6 +88,14 @@ dat <- read_csv("data/YFK STHD.csv")%>%
   filter(yrs_at_large!=0 | release_lifestage != "Juvenile")
 
 
+lytle_summary_init <- dat %>% 
+  group_by(pit_id,release_sitecode,release_datetime) %>% 
+  summarize(detections=n(),
+            first_yfk_detection=min(observation_datetime))
+
+lytle_summary <- lytle_summary_init %>% 
+  group_by(release_sitecode) %>% 
+  tally()
 
 # my numbers aren't really aligning with what Lytle's email says?
 
