@@ -29,6 +29,19 @@ daily.dat <- read_feather("data/daily")
 
 individuals.dat <- read_feather("data/individuals")
 
+
+lf.dat <- individuals.dat %>% 
+  filter(release_lifestage=="Adult",
+         !is.na(length_mm)) %>% 
+  mutate(length_bin=floor(length_mm/25)*25) %>% 
+  mutate(mean_length=mean(length_mm),
+         total_n=n()) %>% 
+  group_by(length_bin) %>% 
+  summarize(freq=n(),
+            total_sample=first(total_n),
+            mean_length=first(mean_length))
+
+
 slider_min <- as.Date(min(individuals.dat$yfk_entry_final))
 
 lastweek <- individuals.dat %>% 
@@ -103,7 +116,7 @@ ui <- page_navbar(
               
               layout_columns(
                 
-                col_widths= c(6,6,6),
+                col_widths= c(4,4,4,6),
                 
                 card(card_header("Stream Discharge"),
                      plotlyOutput("flow_plot"),
@@ -115,7 +128,11 @@ ui <- page_navbar(
                 
                 card(card_header("Unique Fish In"),
                      plotlyOutput("entry_plot"),
-                     full_screen = T)
+                     full_screen = T),
+                
+                card(card_header("Length Frequency"),
+                     plotlyOutput("lf_plot"),
+                     full_screen = TRUE)
                 
                 
               )
@@ -234,6 +251,40 @@ server <- function(input,output,session){
              tooltip=c("text"))
     
   })
+  
+  # make the plotly graph of a length frequency for all the
+  # fish to come through this spawn year
+  
+  output$lf_plot <- renderPlotly({
+    
+    plot.lf <- lf.dat %>%   
+      ggplot(aes(x=length_bin,y=freq))+
+      geom_col(aes(text=str_c("Length Bin: ",length_bin,
+                              "<br>",
+                              "Number: ",freq)),
+               fill="steelblue",color="black")+
+      geom_vline(data=lf.dat,aes(xintercept = first(mean_length)),
+                 linetype="dashed",color="black")+
+      geom_text(x=min(lf.dat$length_bin, na.rm=T)*1.05,
+                y=max(lf.dat$freq, na.rm=T) * 0.88,
+                label=str_c("N = ",first(lf.dat$total_sample)),
+                size=4,hjust=0)+
+      geom_text(x=min(lf.dat$length_bin, na.rm=T)*1.05,
+                y=max(lf.dat$freq, na.rm=T) * 0.95,
+                label=str_c("Mean Length = ",
+                            str_c(round(first(lf.dat$mean_length)),"mm",sep=" ")),
+                size=4,hjust=0)+
+      scale_x_continuous(breaks=seq(min(lf.dat$length_bin),
+                                    max(lf.dat$length_bin),25))+
+      scale_y_continuous(breaks=scales::breaks_pretty(n=10))+
+      theme_bw()+
+      labs(x="Length bin (25 mm)",y="Number of Steelhead")
+    
+    ggplotly(plot.lf,
+             tooltip=c("text"))
+    
+  })
 }
 
 shinyApp(ui, server)
+
