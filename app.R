@@ -34,13 +34,18 @@ slider_min <- as.Date(min(individuals.dat$yfk_entry_final))
 lastweek <- individuals.dat %>% 
   filter(yfk_entry_final>=today()-days(7))
 
+# find two weeks prior to the first PIT tag
+# detection for the year, so that can
+# be the start for the date filter
+
+date_start <- min(daily.dat$yfk_final_date)-weeks(2)
 
 user_dates <-     
   sliderInput(inputId = "user_dates",
               label="Choose a Date Range",
               min=as_date("2025-01-01"),
               max=today(),
-              value=c(as_date("2025-03-15"),today()))
+              value=c(date_start,today()))
 
 
 
@@ -48,7 +53,7 @@ user_dates <-
 
 ui <- page_navbar(
   
-  title="Yankee Fork Salmon River Steelhead",
+  title="Yankee Fork Salmon River PIT Detections",
   
   theme = bs_theme(preset="cyborg"),
   
@@ -68,7 +73,7 @@ ui <- page_navbar(
                   
                   ),
   
-  nav_panel("Placeholder",
+  nav_panel("Steelhead",
             
             
             layout_columns(
@@ -139,9 +144,10 @@ server <- function(input,output,session){
       geom_line(aes(text=str_c(" Date:",date,
                                "<br>","Mean Discharge (cfs): ",mean_discharge,
                                sep=" ")))+
-      scale_x_date(date_breaks = "1 month", date_labels="%b",
+      scale_x_date(date_breaks = "1 week", date_labels="%b %d",
                    limits=c(as.Date(plot_min),as.Date(plot_max)))+
       theme_bw()+
+      theme(axis.text.x=element_text(angle=45,hjust=1))+
       labs(x="",y="Mean Discharge at Yankee Fork Gaging Station")
     
   })
@@ -156,28 +162,7 @@ server <- function(input,output,session){
              tooltip=c("text"))
     
   })
-  
-    # make the plot for daily numbers of pit tags entering
-  
-  dailyentry_reactive <- reactive({
-    
-    plot_min <- min(input$user_dates)
-    plot_max <- max(input$user_dates)
-    
-    entry.plot <- ggplot()+
-      geom_col(data=daily.dat,fill="black",color="grey",
-               aes(x=sf_final_date,y=n,group=spawn_year,
-                   text=str_c(" Date:",sf_final_date,
-                              "<br>","Number Steelhead Entered:",n,
-                              sep=" ")))+
-      scale_x_date(date_breaks = "1 week", date_labels="%b %d",
-                   limits=c(as.Date(plot_min),as.Date(plot_max)))+
-      theme_bw()+
-      theme(axis.text.x=element_text(angle=45,hjust=1))+
-      labs(x="Latest entry date to SF Clearwater",
-           y="Number of unique PIT-Tagged Steelhead")
-    
-  })
+
   
   # make a reactive plot of cumulative
   # numbers in; this is named comp plot bc
