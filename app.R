@@ -12,6 +12,8 @@ library(bsicons)
 library(viridis)
 library(scales)
 library(fontawesome)
+library(leaflet)
+library(leafem)
 
 conflicts_prefer(DT::renderDT,
                  dplyr::filter,
@@ -24,9 +26,42 @@ flow.dat <- read_feather("data/yfk_flow")
 
 daily.dat <- read_feather("data/daily")
 
-
+location.dat <- read_feather("data/locations")
 
 individuals.dat <- read_feather("data/individuals")
+
+lifestage_pal <- colorFactor(palette=c("cyan","magenta"),
+                             levels=c("Juvenile","Adult"))
+
+leaflet_base <- leaflet() %>% 
+  addProviderTiles(providers$Esri.WorldTopoMap,group="Topographic") %>% 
+  addProviderTiles(providers$Esri.WorldImagery,group="Imagery") %>% 
+  addProviderTiles(providers$OpenStreetMap,group="Roads") %>% 
+  addLayersControl(
+    baseGroups=c("Topographic",
+                 "Imagery",
+                 "Roads"),
+    options=layersControlOptions(collapsed=FALSE)) %>% 
+  addMouseCoordinates() %>% 
+  setView(lng=-114.96094,
+          lat=45.29035,zoom=6) %>% 
+  addLegend(pal=lifestage_pal,
+            values=c("Juvenile",
+                     "Adult"),
+            title="Mark Life Stage")%>% 
+  addCircleMarkers(data=location.dat,
+                   lat=~latitude,
+                   lng=~longitude,
+                   fillColor = ~ lifestage_pal(release_lifestage),
+                   color= ~ lifestage_pal(release_lifestage),
+                   clusterOptions = markerClusterOptions(),
+                   popup=~str_c("<b>","Site Code: ","</b>",release_sitecode,
+                                "<br>",
+                                "<b>","Site Name: ","</b>",site_name))
+leaflet_base
+
+
+
 
 
 lf.dat <- individuals.dat %>% 
@@ -115,7 +150,7 @@ ui <- page_navbar(
               
               layout_columns(
                 
-                col_widths= c(4,4,4,6),
+                col_widths= c(4,4,4,6,6),
                 
                 card(card_header("Stream Discharge"),
                      plotlyOutput("flow_plot"),
@@ -131,6 +166,10 @@ ui <- page_navbar(
                 
                 card(card_header("Length Frequency"),
                      plotlyOutput("lf_plot"),
+                     full_screen = TRUE),
+                
+                card(card_header("Marking Locations"),
+                     leafletOutput("marked_map"),
                      full_screen = TRUE)
                 
                 
@@ -281,6 +320,14 @@ server <- function(input,output,session){
     
     ggplotly(plot.lf,
              tooltip=c("text"))
+    
+  })
+  
+  # make the leaflet map in the server
+  
+  output$marked_map <- renderLeaflet({
+    
+    leaflet_base
     
   })
 }
