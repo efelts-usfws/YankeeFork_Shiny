@@ -111,6 +111,10 @@ dat.mark <- yfk_detections.dat %>%
 # or marking at LGR so can get the associated
 # passage dates
 
+yfk_logical <- c("YFK","YANKFK")
+
+yfkentry_logical <- c("YFK")
+
 yfk_individuals.summary <- yfk_detections.dat %>% 
   filter(!pit_id %in% yfk_juvenile.filter) %>% 
   mutate(yfk=ifelse(observation_sitecode %in% yfk_logical,TRUE,
