@@ -75,39 +75,54 @@ downstream_detections.dat <-  vroom(file = "https://api.ptagis.org/reporting/rep
   select(pit_id=Tag)
 
 
+  
+# grab all distinct pit ids from downstream
+
+yfk_downstream.filter <- downstream_detections.dat %>% 
+  distinct(pit_id)
+
+
 # pull out detections at YFK that were juveniles
-# originally marked at YFK and drop
+# originally marked at YFK and find
 # any that don't appear in the downstream detections 
-# query
+# query; these are the ones to drop, will likely
+# be 0
 
 yfk_juvenile.filter <- yfk_detections.dat %>% 
   filter(release_lifestage=="Juvenile",
          release_sitecode=="YANKFK") %>% 
-  distinct(pit_id)
-  
-
+  distinct(pit_id) %>% 
+  filter(!pit_id %in% yfk_downstream.filter$pit_id)
 
 
 # now summarize relevant values and pull
 # in marking location as well
 
-dat.mark <- dat %>% 
+dat.mark <- yfk_detections.dat %>% 
   group_by(pit_id) %>%
   summarize(release_sitecode=first(release_sitecode),
-            release_datetime=first(release_datetime))
+            release_datetime=first(release_datetime)) %>% 
+  filter(!pit_id %in% yfk_juvenile.filter)
 
-yfk_individuals.summary <- int.complete %>% 
+# took the granite part out, could definitely add
+# it back, probably will once I work the other stuff out,
+# would likely just add an additional PTAGIS API to
+# get all mark lifestage detections at LGR adult ladder,
+# or marking at LGR so can get the associated
+# passage dates
+
+yfk_individuals.summary <- yfk_detections.dat %>% 
+  filter(!pit_id %in% yfk_juvenile.filter) %>% 
   mutate(yfk=ifelse(observation_sitecode %in% yfk_logical,TRUE,
                    FALSE),
          yfk_entry=ifelse(observation_sitecode %in% yfkentry_logical,
                          TRUE,FALSE)) %>% 
   group_by(pit_id) %>% 
-  summarize(lgr_final=last(observation_datetime[observation_sitecode=="GRA"]),
-            yfk_first=first(observation_datetime[yfk==TRUE]),
+  summarize(yfk_first=first(observation_datetime[yfk==TRUE]),
             yfk_entry_final=last(observation_datetime[yfk_entry==TRUE]),
             yfk_diff=as.numeric(yfk_entry_final-yfk_first,units="days"),
             length_mm=mean(length_mm,na.rm=T),
-            mark_stage=first(mark_stage)) %>% 
+            release_lifestage=first(release_lifestage)) %>% 
   left_join(dat.mark,by="pit_id")
 
 
