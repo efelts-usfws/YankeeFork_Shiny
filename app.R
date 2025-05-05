@@ -26,7 +26,6 @@ daily.dat <- read_feather("data/daily")
 
 
 
-
 individuals.dat <- read_feather("data/individuals")
 
 

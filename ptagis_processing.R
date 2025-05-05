@@ -9,6 +9,8 @@ library(patchwork)
 library(vroom)
 library(readxl)
 
+conflicts_prefer(vroom::locale)
+
 # set the timeout above default of 60 seconds
 # because sometimes the API calls are slow
 
@@ -141,6 +143,16 @@ yfk_entry.summary <- yfk_individuals.summary %>%
          daily_cumulative=cumsum(daily_prop),
          spawn_year=2025)
 
+# get numbers by location as well
+
+yfk_location.summary <- yfk_detections.dat %>% 
+  group_by(pit_id) %>% 
+  summarize(release_sitecode=first(release_sitecode),
+            release_lifestage=first(release_lifestage)) %>% 
+  left_join(ptagis.dat,by=c("release_sitecode"="site_code"))
+
+
+
 # now also grab yfk water data from USGS gaging station
 
 yfk.site <- "13296000"
@@ -172,11 +184,16 @@ yfk.dat <-yfk.daily %>%
          date<=today()) %>% 
   mutate(group=1)
 
+
+
 write_feather(yfk.dat,"data/yfk_flow")
 
 
 write_feather(yfk_individuals.summary,
               "data/individuals")
+
+write_feather(yfk_location.summary,
+              "data/locations")
 
 write_feather(yfk_entry.summary,
               "data/daily")
