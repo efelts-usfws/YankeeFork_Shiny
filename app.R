@@ -104,7 +104,7 @@ ui <- page_navbar(
   
   theme = bs_theme(preset="cyborg"),
   
-  sidebar=sidebar(width=500,
+  sidebar=sidebar(width=300,
                   
                   accordion(
                     
@@ -150,10 +150,14 @@ ui <- page_navbar(
               
               layout_columns(
                 
-                col_widths= c(4,4,4,6,6),
+                col_widths= c(4,4,4,4,4,4),
                 
                 card(card_header("Stream Discharge"),
                      plotlyOutput("flow_plot"),
+                     full_screen = T),
+                
+                card(card_header("Stream Temperature"),
+                     plotlyOutput("temp_plot"),
                      full_screen = T),
                 
                 card(card_header("Year-to-date Totals"),
@@ -212,6 +216,38 @@ server <- function(input,output,session){
   output$flow_plot <- renderPlotly({
     
     plot1 <- flowplot_reactive()
+    
+    ggplotly(plot1,
+             tooltip=c("text"))
+    
+  })
+  
+  # same thing for the temp plot
+  
+  tempplot_reactive <- reactive({
+    
+    plot_min <- min(input$user_dates)
+    plot_max <- max(input$user_dates)
+    
+    temp.plot <- flow.dat %>% 
+      mutate(date=as_date(date)) %>% 
+      ggplot(aes(x=date,y=mean_temp,group=group))+
+      geom_line(aes(text=str_c(" Date:",date,
+                               "<br>","Mean Temp (C): ",mean_temp,
+                               sep=" ")))+
+      scale_x_date(date_breaks = "1 week", date_labels="%b %d",
+                   limits=c(as.Date(plot_min),as.Date(plot_max)))+
+      theme_bw()+
+      theme(axis.text.x=element_text(angle=45,hjust=1))+
+      labs(x="",y="Mean Temperature at Yankee Fork Gaging Station")
+    
+  })
+  
+  # Render the flow plot as a plotly object
+  
+  output$temp_plot <- renderPlotly({
+    
+    plot1 <- tempplot_reactive()
     
     ggplotly(plot1,
              tooltip=c("text"))
