@@ -2,7 +2,7 @@ name: Update and Deploy Shiny App
 
 on:
   schedule:
-    - cron: '0 7 * * *'  # runs daily at 7 AM UTC (midnight PDT)
+    - cron: '0 9 * * *'  # runs daily at 9 AM UTC (2 AM PDT)
   workflow_dispatch:      # allows manual trigger in GitHub Actions UI
 
 jobs:
