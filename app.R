@@ -9,7 +9,6 @@ library(DT)
 library(shinyWidgets)
 library(conflicted)
 library(plotly)
-library(arrow)
 library(dataRetrieval)
 library(bsicons)
 library(viridis)
@@ -25,13 +24,13 @@ conflicts_prefer(DT::renderDT,
 
 # read in data 
 
-flow.dat <- read_feather("data/yfk_flow")
+flow.dat <- readRDS("data/yfk_flow")
 
-daily.dat <- read_feather("data/daily")
+daily.dat <- readRDS("data/daily")
 
-location.dat <- read_feather("data/locations")
+location.dat <- readRDS("data/locations")
 
-individuals.dat <- read_feather("data/individuals")
+individuals.dat <- readRDS("data/individuals")
 
 lifestage_pal <- colorFactor(palette=c("cyan","magenta"),
                              levels=c("Juvenile","Adult"))

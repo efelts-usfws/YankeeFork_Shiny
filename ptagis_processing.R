@@ -1,5 +1,4 @@
 library(vroom) 
-library(arrow)
 library(dataRetrieval)
 library(conflicted)
 library(dplyr)
@@ -15,9 +14,7 @@ conflicts_prefer(vroom::locale,
 
 options(timeout=300)
 
-
-ptagis.dat <- read_feather("data/ptagis_sites")
-
+ptagis.dat <- readRDS("data/ptagis_sites")
 
 
 yfk_sites <- c("YFK","CEY","YANKWF","YANKFK",
@@ -185,15 +182,15 @@ yfk.dat <-yfk.daily |>
 
 
 
-write_feather(yfk.dat,"data/yfk_flow")
+saveRDS(yfk.dat,"data/yfk_flow")
 
 
-write_feather(yfk_individuals.summary,
+saveRDS(yfk_individuals.summary,
               "data/individuals")
 
-write_feather(yfk_location.summary,
+saveRDS(yfk_location.summary,
               "data/locations")
 
-write_feather(yfk_entry.summary,
+saveRDS(yfk_entry.summary,
               "data/daily")
 
