@@ -18,9 +18,8 @@ jobs:
 
       - name: 🧰 Install required R packages
         run: |
-          Rscript -e 'install.packages(c("rsconnect", "arrow", "tidyverse", "bslib", "DT",
-          "shinyWidgets","conflicted","plotly","dataRetrieval","bsicons","viridis","scales",
-          "fontawesome","leaflet","leafem"))'
+          Rscript -e 'install.packages(c("vroom", "arrow", "tidyverse", "conflicted","dataRetrieval",
+          "dplyr","stringr","lubridate"))'
 
       - name: 🛠️ Run data update script
         run: Rscript ptagis_processing.R

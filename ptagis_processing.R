@@ -1,15 +1,14 @@
-library(tidyverse) 
-library(sf)
-library(leaflet)
-library(leafem)
+library(vroom) 
 library(arrow)
-library(plotly)
 library(dataRetrieval)
-library(patchwork)
-library(vroom)
-library(readxl)
+library(conflicted)
+library(dplyr)
+library(stringr)
+library(lubridate)
 
-conflicts_prefer(vroom::locale)
+
+conflicts_prefer(vroom::locale,
+                 dplyr::filter)
 
 # set the timeout above default of 60 seconds
 # because sometimes the API calls are slow
@@ -25,7 +24,7 @@ yfk_sites <- c("YFK","CEY","YANKWF","YANKFK",
                "EIGH3C")
 
 
-yfk.dat <- ptagis.dat %>% 
+yfk.dat <- ptagis.dat |>  
   filter(site_code %in% yfk_sites)
 
 # want to update to do this by code, but for 
@@ -62,8 +61,8 @@ yfk_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efe
          release_datetime,release_year,observation_sitecode,
          observation_datetime,observation_month,
          observation_year,yrs_at_large,spawn_year,
-         length_mm=`Mark Length`) %>% 
-  mutate(most_recent=max(spawn_year,na.rm=T)) %>% 
+         length_mm=`Mark Length`) |> 
+  mutate(most_recent=max(spawn_year,na.rm=T)) |> 
   filter(spawn_year==most_recent) %>% 
   filter(yrs_at_large!=0 | release_lifestage != "Juvenile")
 
@@ -73,14 +72,14 @@ yfk_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efe
 
 downstream_detections.dat <-  vroom(file = "https://api.ptagis.org/reporting/reports/efelts60/file/YFK%20Steelhead%20Downstream.csv",
                                     delim = ",",
-                                    locale = locale(encoding= "UTF-16LE")) %>% 
+                                    locale = locale(encoding= "UTF-16LE")) |>  
   select(pit_id=Tag)
 
 
   
 # grab all distinct pit ids from downstream
 
-yfk_downstream.filter <- downstream_detections.dat %>% 
+yfk_downstream.filter <- downstream_detections.dat |> 
   distinct(pit_id)
 
 
@@ -92,7 +91,7 @@ yfk_downstream.filter <- downstream_detections.dat %>%
 
 yfk_juvenile.filter <- yfk_detections.dat %>% 
   filter(release_lifestage=="Juvenile",
-         release_sitecode=="YANKFK") %>% 
+         release_sitecode=="YANKFK") |> 
   distinct(pit_id) %>% 
   filter(!pit_id %in% yfk_downstream.filter$pit_id)
 
@@ -100,10 +99,10 @@ yfk_juvenile.filter <- yfk_detections.dat %>%
 # now summarize relevant values and pull
 # in marking location as well
 
-dat.mark <- yfk_detections.dat %>% 
-  group_by(pit_id) %>%
+dat.mark <- yfk_detections.dat  |>  
+  group_by(pit_id)  |> 
   summarize(release_sitecode=first(release_sitecode),
-            release_datetime=first(release_datetime)) %>% 
+            release_datetime=first(release_datetime))  |>  
   filter(!pit_id %in% yfk_juvenile.filter)
 
 # took the granite part out, could definitely add
@@ -117,26 +116,26 @@ yfk_logical <- c("YFK","YANKFK")
 
 yfkentry_logical <- c("YFK")
 
-yfk_individuals.summary <- yfk_detections.dat %>% 
-  filter(!pit_id %in% yfk_juvenile.filter) %>% 
+yfk_individuals.summary <- yfk_detections.dat |> 
+  filter(!pit_id %in% yfk_juvenile.filter) |>  
   mutate(yfk=ifelse(observation_sitecode %in% yfk_logical,TRUE,
                    FALSE),
          yfk_entry=ifelse(observation_sitecode %in% yfkentry_logical,
                          TRUE,FALSE)) %>% 
-  group_by(pit_id) %>% 
+  group_by(pit_id)  |>  
   summarize(yfk_first=first(observation_datetime[yfk==TRUE]),
             yfk_entry_final=last(observation_datetime[yfk_entry==TRUE]),
             yfk_diff=as.numeric(yfk_entry_final-yfk_first,units="days"),
             length_mm=mean(length_mm,na.rm=T),
-            release_lifestage=first(release_lifestage)) %>% 
+            release_lifestage=first(release_lifestage)) |>  
   left_join(dat.mark,by="pit_id")
 
 
-yfk_entry.summary <- yfk_individuals.summary %>% 
-  mutate(yfk_final_date=as_date(yfk_entry_final)) %>% 
-  group_by(yfk_final_date) %>% 
-  summarise(n=n()) %>% 
-  ungroup() %>% 
+yfk_entry.summary <- yfk_individuals.summary |>  
+  mutate(yfk_final_date=as_date(yfk_entry_final))  |>  
+  group_by(yfk_final_date)  |>  
+  summarise(n=n()) |>  
+  ungroup() |>  
   mutate(sy_total=sum(n),
          cumulative_total=cumsum(n),
          daily_prop=n/sy_total,
@@ -145,10 +144,10 @@ yfk_entry.summary <- yfk_individuals.summary %>%
 
 # get numbers by location as well
 
-yfk_location.summary <- yfk_detections.dat %>% 
-  group_by(pit_id) %>% 
+yfk_location.summary <- yfk_detections.dat |> 
+  group_by(pit_id)  |>  
   summarize(release_sitecode=first(release_sitecode),
-            release_lifestage=first(release_lifestage)) %>% 
+            release_lifestage=first(release_lifestage))  |>  
   left_join(ptagis.dat,by=c("release_sitecode"="site_code"))
 
 
@@ -173,15 +172,15 @@ today.text <- as.character(today(tz="America/Los_Angeles"))
 yfk.daily <- readNWISdv(siteNumber=yfk.site,
                            parameterCd = parm.cd,
                            startDate="1990-01-01",
-                           endDate=today.text) %>% 
+                           endDate=today.text) |> 
   select(date=Date,
          mean_temp=X_00010_00003,
-         mean_discharge=X_00060_00003) %>% 
+         mean_discharge=X_00060_00003) |> 
   mutate(date=as_date(date))
 
-yfk.dat <-yfk.daily %>% 
+yfk.dat <-yfk.daily |> 
   filter(date>=as_date("2025-01-01"),
-         date<=today()) %>% 
+         date<=today()) |>  
   mutate(group=1)
 
 
