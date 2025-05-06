@@ -1,0 +1,12 @@
+name: YankeeFork_Shiny
+title: YankeeFork_Shiny
+username: elifelts
+account: elifelts
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 14688729
+bundleId: 10235264
+url: https://elifelts.shinyapps.io/YankeeFork_Shiny/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
