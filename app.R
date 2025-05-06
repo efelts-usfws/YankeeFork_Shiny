@@ -1,6 +1,9 @@
 
 library(shiny)
-library(tidyverse)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(lubridate)
 library(bslib)
 library(DT)
 library(shinyWidgets)
@@ -58,7 +61,7 @@ leaflet_base <- leaflet() %>%
                    popup=~str_c("<b>","Site Code: ","</b>",release_sitecode,
                                 "<br>",
                                 "<b>","Site Name: ","</b>",site_name))
-leaflet_base
+
 
 
 
