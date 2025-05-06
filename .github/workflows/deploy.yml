@@ -18,8 +18,7 @@ jobs:
 
       - name: 🧰 Install required R packages
         run: |
-          Rscript -e 'install.packages(c("vroom", "arrow","conflicted","dataRetrieval",
-          "dplyr","stringr","lubridate"))'
+          Rscript -e 'install.packages(c("vroom", "arrow","conflicted","dataRetrieval","dplyr","stringr","lubridate"))'
 
       - name: 🛠️ Run data update script
         run: Rscript ptagis_processing.R
