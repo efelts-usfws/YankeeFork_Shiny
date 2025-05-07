@@ -36,7 +36,7 @@ jobs:
       - name: 🧰 Install required R packages
         run: |
           Rscript -e 'options(repos = c(CRAN = "https://cloud.r-project.org")); 
-          install.packages(c("shiny","vroom","conflicted","curl","httr2","dataRetrieval","dplyr","stringr","lubridate","rsconnect","ggplot2","bslib","DT","shinyWidgets","plotly","bsicons","viridis","scales","fontawesome","png","raster","sf","units","terra",leaflet","leafem"))'
+          install.packages(c("shiny","vroom","conflicted","curl","httr2","dataRetrieval","dplyr","stringr","lubridate","rsconnect","ggplot2","bslib","DT","shinyWidgets","plotly","bsicons","viridis","scales","fontawesome","png","raster","sf","units","terra","leaflet","leafem"))'
 
       - name: 🛠️ Run data update script
         run: Rscript ptagis_processing.R
