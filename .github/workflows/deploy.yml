@@ -24,7 +24,7 @@ jobs:
       - name: 🧰 Install required R packages
         run: |
           Rscript -e 'options(repos = c(CRAN = "https://cloud.r-project.org")); 
-          install.packages(c("shiny",vroom","conflicted","curl","httr2","dataRetrieval","dplyr","stringr","lubridate",
+          install.packages(c("shiny","vroom","conflicted","curl","httr2","dataRetrieval","dplyr","stringr","lubridate",
           "rsconnect","ggplot2","bslib","DT","shinyWidgets","plotly","bsicons","viridis","scales","fontawesome",
           "leaflet","leafem"))'
 
