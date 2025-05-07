@@ -14,6 +14,11 @@ conflicts_prefer(vroom::locale,
 
 options(timeout=300)
 
+# need to create a data directory in the processing
+# code so it gets stored in github actions
+
+dir.create("data", recursive=TRUE, showWarnings=FALSE)
+
 
 
 ptagis.dat <- readRDS("data/ptagis_sites")
