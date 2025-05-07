@@ -30,13 +30,13 @@ jobs:
       - name: 🛠️ Run data update script
         run: Rscript ptagis_processing.R
         
-    - name: 🐛 Check for data/ contents
-      run: |
-        echo "=== Does data/ exist? ==="
+      - name: Check for data/ contents
+        run: |
+        echo = "=== Does data/ exist? ==="
         if [ -d "data" ]; then echo "Yes, data/ exists."; else echo "No, data/ does NOT exist."; fi
         echo ""
-        echo "=== Listing contents of data/ ==="
-        ls -la data || echo "data/ folder is missing or empty"
+        echo " === Listing contents of data/ ==="
+        ls -la data || echo "data/ folder is missing or"
 
       - name: 🚀 Deploy to shinyapps.io
         env:
