@@ -13,9 +13,15 @@ jobs:
       - name: 📥 Check out repo
         uses: actions/checkout@v3
         
-      - name: Install system dependencies
+      - name: Add geospatial dependencies
         run: |
           sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository ppa:ubuntugis/ubuntugis-unstable
+          sude apt-get update
+        
+      - name: Install system dependencies
+        run: |
           sudo apt-get install -y \
             libcurl4-openssl-dev \ 
             libssl-dev \
