@@ -52,6 +52,10 @@ jobs:
           restore-keys: | 
             ${{ runner.os }}-renv-
 
+      - name: Test digest install (debug)
+        run: |
+          Rscript -e 'install.packages("digest")'
+      
       - name: Restore R environment
         run: |
           Rscript -e 'install.packages("renv")'
