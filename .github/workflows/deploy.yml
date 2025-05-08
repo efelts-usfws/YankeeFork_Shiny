@@ -38,7 +38,8 @@ jobs:
         with: 
           path: ~/.local/share/renv 
           key: ${{ runner.os }}-renv-${{ hashFiles('**/renv.lock') }} 
-          restore-keys: | ${{ runner.os }}-renv-
+          restore-keys: | 
+            ${{ runner.os }}-renv-
 
       - name: Restore R environment
         run: |
