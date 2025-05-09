@@ -46,15 +46,15 @@ jobs:
         
       - name: Ensure cache directories exist
         run: |
-          mkdir -p "$HOME/.local/share/renv"
-          mkdir -p "$HOME/.cache/R/renv"
+          mkdir -p ~/.local/share/renv
+          mkdir -p ~/.cache/R/renv
         
       - name: Cache R packages 
         uses: actions/cache@v3 
         with: 
           path: |
-            $HOME/.local/share/renv
-            $HOME/.cache/R/renv
+            ~/.local/share/renv
+            ~/.cache/R/renv
           key: ${{ runner.os }}-renv-${{ hashFiles('**/renv.lock') }} 
           restore-keys: | 
             ${{ runner.os }}-renv-
