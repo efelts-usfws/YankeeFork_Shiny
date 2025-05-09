@@ -47,7 +47,7 @@ jobs:
       - name: Ensure cache directories exist
         run: |
           mkdir -p "$HOME/.local/share/renv"
-          mkdir -p "$HOME/.cache/R/renv""
+          mkdir -p "$HOME/.cache/R/renv"
         
       - name: Cache R packages 
         uses: actions/cache@v3 
