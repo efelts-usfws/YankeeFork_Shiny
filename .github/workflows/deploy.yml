@@ -46,14 +46,14 @@ jobs:
         
       - name: Ensure cache directories exist
         run: |
-          mkdir -p ~/.local/share/renv
-          mkdir -p ~/.cache/R/renv
+          mkdir -p "$HOME/.local/share/renv"
+          mkdir -p "$HOME/.cache/R/renv""
         
       - name: Cache R packages 
         uses: actions/cache@v3 
         with: 
-          path: ~/.local/share/renv 
-                ~/.cache/R/renv
+          path: $HOME/.local/share/renv
+                $HOME/.cache/R/renv
           key: ${{ runner.os }}-renv-${{ hashFiles('**/renv.lock') }} 
           restore-keys: | 
             ${{ runner.os }}-renv-
@@ -64,7 +64,7 @@ jobs:
       
       - name: Restore R environment
         run: |
-          Rscript -e 'install.packages("renv")'
+          Rscript -e 'install.packages("renv", repos="https://cloud.r-project.org")'
           Rscript -e 'renv::restore()'
 
       
