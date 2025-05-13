@@ -32,7 +32,10 @@ location.dat <- readRDS("data/locations")
 
 individuals.dat <- readRDS("data/individuals")
 
-alldaily.dat <- readRDS("data/alldaily")
+alldaily.dat <- readRDS("data/alldaily") |> 
+  filter(spawn_year>2012) |> 
+  mutate(yr_category=ifelse(spawn_year==first(daily.dat$spawn_year),
+                            "Current","Previous"))
 
 projection.dat <- readRDS("data/projections")
 
@@ -316,14 +319,14 @@ server <- function(input,output,session){
     
     comp_plot <- alldaily.dat %>% 
       ggplot(aes(x=dummy_entry_date,y=daily_cumulative_n,
-                 group=spawn_year,color=as.factor(spawn_year)))+
+                 group=spawn_year,color=as.factor(yr_category)))+
       geom_line(aes(text=str_c(" Date:",format(dummy_entry_date, "%b %d"),
                                "<br>",
                                "Spawn Year:",spawn_year,
                                "<br>",
                                "Number In:",round(daily_cumulative_n),sep=" ")))+
       theme_bw()+
-      scale_color_viridis(discrete=T)+
+      scale_color_manual(values=c("steelblue","gray70"))+
       theme(axis.text.x=element_text(angle=45,hjust=1))+
       scale_x_date(date_breaks = "1 week", date_labels="%b %d",
                     limits=c(as.Date(plot_lim.dat$plot_min),as.Date(plot_lim.dat$plot_max)))+
