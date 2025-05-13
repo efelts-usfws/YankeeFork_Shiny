@@ -228,7 +228,8 @@ complete_daily <- readRDS("data/daily_completed") |>
                                     as.Date(day_of_year,origin="1977-12-31"),
                                     as.Date(day_of_year,origin="1976-12-31"))) |> 
   filter(!day_of_year==182) |> 
-  mutate(plot_category="Completed Spawn Years")
+  mutate(plot_category="Completed Spawn Years") |> 
+  filter(spawn_year>2012)
 
 
 # get estimates of how much of the run has been
