@@ -32,6 +32,35 @@ location.dat <- readRDS("data/locations")
 
 individuals.dat <- readRDS("data/individuals")
 
+alldaily.dat <- readRDS("data/alldaily")
+
+projection.dat <- readRDS("data/projections")
+
+# calculate estimate of how much of the run is complete
+
+run_stats <- alldaily.dat |> 
+  filter(spawn_year<year(today()),
+         spawn_year>2012) |> 
+  group_by(spawn_year) |> 
+  mutate(total_n=sum(n),
+         prop_complete=daily_cumulative_n/total_n) |> 
+  group_by(dummy_entry_date) |> 
+  summarize(median_percentcomplete=round(median(prop_complete)*100),
+            min_percentcomplete=round(min(prop_complete)*100),
+            max_percentcomplete=round(max(prop_complete)*100))
+
+
+today_dummy <- tibble(date=today()) |> 
+  mutate(doy=yday(date),
+         dummy=if_else(doy<182,
+                       as.Date(doy,origin="1977-12-31"),
+                       as.Date(doy,origin="1976-12-31"))) |> 
+  pull(dummy)
+
+
+today_run <- run_stats |> 
+  filter(dummy_entry_date==today_dummy)
+
 lifestage_pal <- colorFactor(palette=c("cyan","magenta"),
                              levels=c("Juvenile","Adult"))
 
@@ -143,6 +172,17 @@ ui <- page_navbar(
                 
                 
                 
+              ),
+              
+              value_box(
+                title="Estimated Percent of Run Complete",
+                value=str_c(today_run$median_percentcomplete,"%",
+                            sep=" "),
+                showcase=bs_icon("circle-half"),
+                p(str_c("Range:",str_c(today_run$min_percentcomplete,"%",sep=" "),
+                        "-",
+                        str_c(today_run$max_percentcomplete,"%",sep=" "),
+                        sep=" "))
               )
               
             ),
