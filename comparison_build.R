@@ -74,44 +74,67 @@ yfk_downstream.filter <- read_csv("data/YFK Steelhead Downstream Comparisons.csv
   group_by(pit_id) |> 
   slice(which.max(ds_datetime))
 
+
+  
 # pull out detection at YFK that were marked as juveniles
-#  at YFK, SAWT, PAHSIW, YANKWF, or SALR4 and find any that don't 
+#  at YFK, SAWT, PAHSIW, YANKWF, or SALR4, join to downstream
+# detections and drop any that don't 
 # appear in the downstream detections query; this is to make sure 
 # we're tracking migratory fish as those detected further down
-# in the hydrostysem were much more likey to have spent time
+# in the hydrosystem were much more likey to have spent time
 # in the ocean, and detections are very high  in the adult ladders
 # so if they did that there should be a high probability they
 # show up in this query; also, need to see if they showed up downstream
-# and that they had detections at YFK after they showed
-# up down there to consider them as part of these summaries
-
-
+# and be able to filter to detections at YFK after they showed
+# up down there, because don't want to be considering detections from
+# before they emigrated
 
 yfk_juvenile.filter <- dat |> 
   filter(release_lifestage=="Juvenile",
          release_sitecode %in% c("YANKFK","SAWT",
                                  "PAHSIW","YANKWF",
                                  "SALR4")) |> 
-  distinct(pit_id) |> 
-  filter(!pit_id %in% yfk_downstream.filter$pit_id)
-
-# for the juveniles, 
-
-yfk_juvenile.filter2 <- dat |> 
-  filter(release_lifestage=="Juvenile",
-         release_sitecode %in% c("YANKFK","SAWT",
-                                 "PAHSIW","YANKWF",
-                                 "SALR4")) |> 
   left_join(yfk_downstream.filter,by="pit_id") |> 
   filter(!is.na(ds_datetime)) |> 
-  distinct(pit_id)
+  group_by(pit_id) |> 
+  filter(observation_datetime>ds_datetime) |> 
+  ungroup() |> 
+  select(-c(ds_datetime,ds_site))
+
+# because of the way that i set up downstream
+# detection query, this will not find the downstream
+# history of those marked anywhere except YANKWF; to do
+# so would require separate queries because there's a 
+# lot of fish released from these various sites; there
+# was a small enough number of according records that i 
+# just looked manually to see which should be retained
+
+manual_keep <- c("3D9.1BF26C0876","3DD.003BE21D8A",
+                 "3DD.0077A773FD","3DD.0077B47D49",
+                 "3DD.0077E4130B")
+
+
+# filter out those marked as adults or marked as juveniles
+# outside the Upper Salmon from original, or the ones
+# i said to manually keep,
+# then bind with the filtered detections of those
+# marked as juvenile
+
+summary.dat <- dat |> 
+  filter(release_lifestage=="Adult"|
+           (release_lifestage=="Juvenile"&
+              !release_sitecode %in% c("YANKFK","SAWT",
+                                       "PAHSIW","YANKWF",
+                                       "SALR4"))|
+         pit_id %in% manual_keep) |> 
+  bind_rows(yfk_juvenile.filter)
+
 
 
 
 # now summarize relevant values and pull in marking locations as well
 
-dat.mark <- dat |> 
-  filter(!pit_id %in% yfk_juvenile.filter$pit_id) |> 
+dat.mark <- summary.dat |> 
   group_by(pit_id) |> 
   summarize(release_sitecode=first(release_sitecode),
             release_datetime=first(release_datetime))
@@ -128,13 +151,41 @@ yfkentry_logical <- c("YFK")
 # life stage is adult and length is less than 450, which
 # should be a pretty conservative filter 
 
-yfkreturns_completedyrs <- dat |> 
-  filter(!pit_id %in% yfk_juvenile.filter$pit_id) |> 
-  group_by(pit_id) |>
-  summarize(spawn_year=first(spawn_year),
-            yfk_entry_first=first(observation_datetime),
-            yfk_entry_last=last(observation_datetime),
+yfkindividuals_completedyrs <- summary.dat |> 
+  group_by(pit_id,spawn_year) |>
+  summarize(yfk_first=first(observation_datetime),
+            yfk_entry_final=last(observation_datetime),
+            yfk_diff=as.numeric(yfk_entry_final-yfk_first,units="days"),
             length_mm=mean(length_mm,na.rm=T),
-            release_lifestage=first(release_lifestage),
-            yrs_at_large=first(yrs_at_large))
+            release_lifestage=first(release_lifestage)) |> 
+  left_join(dat.mark,by="pit_id")
 
+
+# that's the data frame that will be used to plot so save here
+
+saveRDS(yfkindividuals_completedyrs,
+        "data/individuals_completed")
+
+# now summarize by day so we can reference how much of 
+# the run should be complete on a given day
+
+yfk_entry_daily <- yfkindividuals_completedyrs |> 
+  mutate(yfk_final_date=as_date(yfk_entry_final)) |> 
+  group_by(spawn_year) |> 
+  mutate(sy_total=n()) |> 
+  ungroup() |> 
+  group_by(yfk_final_date) |> 
+  summarize(spawn_year=first(spawn_year),
+            n=n(),
+            sy_total=first(sy_total)) |>
+  group_by(spawn_year) |> 
+  mutate(daily_running_total=cumsum(n),
+         daily_prop=n/sy_total,
+         daily_cumulative=daily_running_total/sy_total)
+
+# that's the data frame that will get used in constructing
+# descriptions of where current year is relative to the
+# previous runs
+
+saveRDS(yfk_entry_daily,
+        "data/daily_completed")
