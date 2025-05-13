@@ -305,19 +305,28 @@ server <- function(input,output,session){
   
   compplot_reactive <- reactive({
     
-    plot_lim.dat <- tibble(min_doy=min(input$user_dates),
-                           max_doy=max(input$user_dates))
+    plot_lim.dat <- tibble(min_doy=yday(min(input$user_dates)),
+                           max_doy=yday(max(input$user_dates))) |> 
+      mutate(plot_min=ifelse(min_doy<182,
+                             as.Date(min_doy,origin="1977-12-31"),
+                             as.Date(min_doy,origin="1976-12-31")),
+             plot_max=ifelse(max_doy<182,
+                             as.Date(max_doy,origin="1977-12-31"),
+                             as.Date(max_doy,origin="1976-12-31")))
     
-    comp_plot <- daily.dat %>% 
-      ggplot(aes(x=yfk_final_date,y=cumulative_total,
-                 group=spawn_year))+
-      geom_line(aes(text=str_c(" Date:",format(yfk_final_date, "%b %d"),
+    comp_plot <- alldaily.dat %>% 
+      ggplot(aes(x=dummy_entry_date,y=daily_cumulative_n,
+                 group=spawn_year,color=as.factor(spawn_year)))+
+      geom_line(aes(text=str_c(" Date:",format(dummy_entry_date, "%b %d"),
                                "<br>",
-                               "Number In:",round(cumulative_total),sep=" ")))+
+                               "Spawn Year:",spawn_year,
+                               "<br>",
+                               "Number In:",round(daily_cumulative_n),sep=" ")))+
       theme_bw()+
+      scale_color_viridis(discrete=T)+
       theme(axis.text.x=element_text(angle=45,hjust=1))+
-       scale_x_date(date_breaks = "1 week", date_labels="%b %d",
-                    limits=c(as.Date(plot_lim.dat$min_doy),as.Date(plot_lim.dat$max_doy)))+
+      scale_x_date(date_breaks = "1 week", date_labels="%b %d",
+                    limits=c(as.Date(plot_lim.dat$plot_min),as.Date(plot_lim.dat$plot_max)))+
       labs(x="Date to Yankee Fork Salmon River",
            y="# PIT Tags in Yankee Fork, Year-To-Date",
            color="")
