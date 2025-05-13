@@ -4,7 +4,7 @@ library(conflicted)
 library(dplyr)
 library(stringr)
 library(lubridate)
-
+library(tidyr)
 
 conflicts_prefer(vroom::locale,
                  dplyr::filter)
@@ -61,7 +61,7 @@ yfk_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efe
          release_datetime=mdy(`Release Date`),
          release_year=year(release_datetime),
          yrs_at_large=observation_year-release_year) %>% 
-  select(pit_id=Tag,,rear_type=`Rear Type Code`,
+  select(pit_id=Tag,rear_type=`Rear Type Code`,
          release_sitecode,release_lifestage=`Mark Life Stage`,
          release_datetime,release_year,observation_sitecode,
          observation_datetime,observation_month,
@@ -202,3 +202,13 @@ saveRDS(yfk_location.summary,
 saveRDS(yfk_entry.summary,
               "data/daily")
 
+# right now the complete range won't update 
+# programatically as new spawn years are added;
+# I don't think it's a big deal but just need
+# to remember when appending a new one
+
+complete_daily <- readRDS("data/daily_completed") |> 
+  filter(spawn_year<first(yfk_entry.summary$spawn_year)) |> 
+  ungroup() |> 
+  complete(yfk_final_date=seq(as_date("2012-07-01"),as_date("2024-06-30"),
+                              by="day"))
