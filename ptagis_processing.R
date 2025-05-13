@@ -211,4 +211,88 @@ complete_daily <- readRDS("data/daily_completed") |>
   filter(spawn_year<first(yfk_entry.summary$spawn_year)) |> 
   ungroup() |> 
   complete(yfk_final_date=seq(as_date("2012-07-01"),as_date("2024-06-30"),
-                              by="day"))
+                              by="day")) |> 
+  mutate(obs_year=year(yfk_final_date),
+         obs_month=month(yfk_final_date),
+         spawn_year=ifelse(obs_month>6,(obs_year+1),
+                                      obs_year)) |> 
+  group_by(spawn_year) |> 
+  fill(sy_total,.direction="updown") |> 
+  mutate(n=ifelse(is.na(n),0,n),
+         daily_running_total=cumsum(n),
+         daily_prop=n/sy_total,
+         daily_cumulative=cumsum(daily_prop),
+         daily_percent=daily_cumulative*100) %>% 
+  mutate(day_of_year=yday(yfk_final_date),
+         dummy_entry_date=if_else(day_of_year<182,
+                                    as.Date(day_of_year,origin="1977-12-31"),
+                                    as.Date(day_of_year,origin="1976-12-31"))) |> 
+  filter(!day_of_year==182) |> 
+  mutate(plot_category="Completed Spawn Years")
+
+
+# get estimates of how much of the run has been
+# completed on a given day of the year for use
+# in estimating what the total will be based
+# on year-to-date numbers in given spawn year
+
+complete_reference <- complete_daily %>% 
+  group_by(dummy_entry_date) %>% 
+  summarize(median_cum=median(daily_cumulative),
+            min_cum=min(daily_cumulative),
+            max_cum=max(daily_cumulative),
+            min_dailyprop=min(daily_prop),
+            median_dailyprop=median(daily_prop),
+            max_daily_prop=max(daily_prop))
+
+
+complete_current <- yfk_entry.summary %>% 
+  complete(yfk_final_date=seq(as_date("2024-07-01"),today(),
+                             by="day")) %>% 
+  mutate(obs_year=year(yfk_final_date),
+         obs_month=month(yfk_final_date),
+         spawn_year=ifelse(obs_month>6,(obs_year+1),
+                           obs_year))%>% 
+  group_by(spawn_year) %>% 
+  mutate(n=ifelse(is.na(n),0,n),
+         daily_running_total=cumsum(n),
+         daily_prop=n/sy_total,
+         daily_cumulative=cumsum(daily_prop),
+         daily_percent=daily_cumulative*100) %>% 
+  mutate(day_of_year=yday(yfk_final_date),
+         dummy_entry_date=if_else(day_of_year<182,
+                                    as.Date(day_of_year,origin="1977-12-31"),
+                                    as.Date(day_of_year,origin="1976-12-31"))) %>% 
+  filter(!day_of_year==182) %>% 
+  select(spawn_year,yfk_final_date,n,dummy_entry_date) %>% 
+  mutate(daily_cumulative_n=cumsum(n))
+
+
+projected_totals <- complete_current %>% 
+  slice(which.max(yfk_final_date)) %>% 
+  left_join(complete_reference,by="dummy_entry_date") %>% 
+  mutate(max_sy_total=daily_cumulative_n/min_cum,
+         median_sy_total=daily_cumulative_n/median_cum,
+         min_sy_total=daily_cumulative_n/max_cum) %>% 
+  select(spawn_year,min_sy_total,median_sy_total,
+         max_sy_total) %>% 
+  pivot_longer(min_sy_total:max_sy_total,
+               values_to = "sy_total") %>% 
+  mutate(projection_category=str_to_title(word(name,1,sep="_")))
+
+# make the projections points that can go on the plot
+
+projected_pts <- projected_totals %>% 
+  mutate(yfk_final=as_date("2025-06-01"),
+         dummy_sfentry_date=as_date("1978-06-01"))
+
+
+alldaily <- complete_daily %>% 
+  select(spawn_year,yfk_final_date,n,dummy_entry_date,
+         daily_cumulative_n=daily_running_total) %>% 
+  bind_rows(complete_current)
+
+# save additional parts to include in the shiny app
+
+saveRDS(alldaily,"data/alldaily")
+saveRDS(projected_pts,"data/projections")
