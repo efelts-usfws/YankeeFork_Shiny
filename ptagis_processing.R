@@ -108,7 +108,7 @@ dat.mark <- yfk_detections.dat  |>
   group_by(pit_id)  |> 
   summarize(release_sitecode=first(release_sitecode),
             release_datetime=first(release_datetime))  |>  
-  filter(!pit_id %in% yfk_juvenile.filter)
+  filter(!pit_id %in% yfk_juvenile.filter$pit_id)
 
 # took the granite part out, could definitely add
 # it back, probably will once I work the other stuff out,
@@ -122,7 +122,7 @@ yfk_logical <- c("YFK","YANKFK")
 yfkentry_logical <- c("YFK")
 
 yfk_individuals.summary <- yfk_detections.dat |> 
-  filter(!pit_id %in% yfk_juvenile.filter) |>  
+  filter(!pit_id %in% yfk_juvenile.filter$pit_id) |>  
   mutate(yfk=ifelse(observation_sitecode %in% yfk_logical,TRUE,
                    FALSE),
          yfk_entry=ifelse(observation_sitecode %in% yfkentry_logical,
