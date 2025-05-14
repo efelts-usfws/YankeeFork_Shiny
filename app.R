@@ -32,6 +32,27 @@ location.dat <- readRDS("data/locations")
 
 individuals.dat <- readRDS("data/individuals")
 
+individuals.export <- individuals.dat |> 
+  select(pit_id,release_lifestage,release_sitecode,
+         release_datetime,length_mm,yfk_entry=yfk_entry_final)
+
+# compute summaries of where individuals were marked;
+# bring PTAGIS metadata in to get full names
+
+ptagis.dat <- readRDS("data/ptagis_sites") 
+
+
+mark.summary <- individuals.dat |> 
+  left_join(ptagis.dat,by=c("release_sitecode"="site_code")) |> 
+  group_by(release_sitecode,release_lifestage) |> 
+  summarize(n=n(),
+            site_name=first(site_name)) |> 
+  arrange(-n) |> 
+  select(`Site Name`=site_name,
+         `Site Code`=release_sitecode,
+         `Life Stage at Marking`=release_lifestage,
+         Count=n)
+
 alldaily.dat <- readRDS("data/alldaily") |> 
   filter(spawn_year>2012) |> 
   mutate(yr_category=ifelse(spawn_year==first(daily.dat$spawn_year),
@@ -146,7 +167,10 @@ ui <- page_navbar(
                       
                       "Explore Data",
                       
-                      user_dates
+                      user_dates,
+                      
+                      downloadBttn("download_ind",
+                                   "Download Current Year Individual Summaries")
                       
                     )
                     
@@ -218,7 +242,7 @@ ui <- page_navbar(
                      full_screen = TRUE),
                 
                 card(card_header("Marking Locations"),
-                     leafletOutput("marked_map"),
+                     DTOutput("marklocation_summary"),
                      full_screen = TRUE)
                 
                 
@@ -355,7 +379,7 @@ server <- function(input,output,session){
     plot_max <- max(input$user_dates)
     
     entry.plot <- ggplot()+
-      geom_col(data=daily.dat,fill="black",color="grey",
+      geom_col(data=daily.dat,fill="dodgerblue",color="grey",
                aes(x=yfk_final_date,y=n,group=spawn_year,
                    text=str_c(" Date:",yfk_final_date,
                               "<br>","Number Steelhead Entered:",n,
@@ -364,7 +388,7 @@ server <- function(input,output,session){
                    limits=c(as.Date(plot_min),as.Date(plot_max)))+
       theme_bw()+
       theme(axis.text.x=element_text(angle=45,hjust=1))+
-      labs(x="Latest entry date to Yankee Fork Salmon River",
+      labs(x="Date at Yankee Fork PIT Array",
            y="Number of unique PIT-Tagged Steelhead")
     
   })
@@ -413,13 +437,42 @@ server <- function(input,output,session){
     
   })
   
-  # make the leaflet map in the server
+  # # make the leaflet map in the server
+  # 
+  # output$marked_map <- renderLeaflet({
+  #   
+  #   leaflet_base
+  #   
+  # })
   
-  output$marked_map <- renderLeaflet({
+  # render a data table of marking summaries
+  
+  output$marklocation_summary <- renderDT({
     
-    leaflet_base
+    
+    mark.summary
     
   })
+  
+  # make a download output of individual data
+  
+  output$download_ind <- downloadHandler(
+    
+    
+    filename=function(){
+      
+      paste("YFK_STHD_detections_",as.integer(today()),".csv",sep="")
+      
+    },
+    
+    content=function(file){
+      
+      write.csv(individuals.export,file,row.names=F)
+      
+    }
+    
+  )
+  
 }
 
 shinyApp(ui, server)
