@@ -28,12 +28,12 @@ flow.dat <- readRDS("data/yfk_flow")
 
 daily.dat <- readRDS("data/daily")
 
-location.dat <- readRDS("data/locations")
+# location.dat <- readRDS("data/locations")
 
 individuals.dat <- readRDS("data/individuals")
 
 individuals.export <- individuals.dat |> 
-  select(pit_id,release_lifestage,release_sitecode,
+  select(pit_id,species,release_lifestage,release_sitecode,
          release_datetime,length_mm,yfk_entry=yfk_entry_final)
 
 # compute summaries of where individuals were marked;
@@ -85,34 +85,34 @@ today_dummy <- tibble(date=today()) |>
 today_run <- run_stats |> 
   filter(dummy_entry_date==today_dummy)
 
-lifestage_pal <- colorFactor(palette=c("cyan","magenta"),
-                             levels=c("Juvenile","Adult"))
-
-leaflet_base <- leaflet() %>% 
-  addProviderTiles(providers$Esri.WorldTopoMap,group="Topographic") %>% 
-  addProviderTiles(providers$Esri.WorldImagery,group="Imagery") %>% 
-  addProviderTiles(providers$OpenStreetMap,group="Roads") %>% 
-  addLayersControl(
-    baseGroups=c("Topographic",
-                 "Imagery",
-                 "Roads"),
-    options=layersControlOptions(collapsed=FALSE)) %>% 
-  addMouseCoordinates() %>% 
-  setView(lng=-114.96094,
-          lat=45.29035,zoom=6) %>% 
-  addLegend(pal=lifestage_pal,
-            values=c("Juvenile",
-                     "Adult"),
-            title="Mark Life Stage")%>% 
-  addCircleMarkers(data=location.dat,
-                   lat=~latitude,
-                   lng=~longitude,
-                   fillColor = ~ lifestage_pal(release_lifestage),
-                   color= ~ lifestage_pal(release_lifestage),
-                   clusterOptions = markerClusterOptions(),
-                   popup=~str_c("<b>","Site Code: ","</b>",release_sitecode,
-                                "<br>",
-                                "<b>","Site Name: ","</b>",site_name))
+# lifestage_pal <- colorFactor(palette=c("cyan","magenta"),
+#                              levels=c("Juvenile","Adult"))
+# 
+# leaflet_base <- leaflet() %>% 
+#   addProviderTiles(providers$Esri.WorldTopoMap,group="Topographic") %>% 
+#   addProviderTiles(providers$Esri.WorldImagery,group="Imagery") %>% 
+#   addProviderTiles(providers$OpenStreetMap,group="Roads") %>% 
+#   addLayersControl(
+#     baseGroups=c("Topographic",
+#                  "Imagery",
+#                  "Roads"),
+#     options=layersControlOptions(collapsed=FALSE)) %>% 
+#   addMouseCoordinates() %>% 
+#   setView(lng=-114.96094,
+#           lat=45.29035,zoom=6) %>% 
+#   addLegend(pal=lifestage_pal,
+#             values=c("Juvenile",
+#                      "Adult"),
+#             title="Mark Life Stage")%>% 
+#   addCircleMarkers(data=location.dat,
+#                    lat=~latitude,
+#                    lng=~longitude,
+#                    fillColor = ~ lifestage_pal(release_lifestage),
+#                    color= ~ lifestage_pal(release_lifestage),
+#                    clusterOptions = markerClusterOptions(),
+#                    popup=~str_c("<b>","Site Code: ","</b>",release_sitecode,
+#                                 "<br>",
+#                                 "<b>","Site Name: ","</b>",site_name))
 
 
 
@@ -143,7 +143,7 @@ lastweek_new <- individuals.dat %>%
 # detection for the year, so that can
 # be the start for the date filter
 
-date_start <- min(daily.dat$yfk_final_date)-weeks(2)
+date_start <- min(daily.dat$yfk_entry_date)-weeks(2)
 
 user_dates <-     
   sliderInput(inputId = "user_dates",
@@ -383,9 +383,9 @@ server <- function(input,output,session){
     plot_max <- max(input$user_dates)
     
     entry.plot <- ggplot()+
-      geom_col(data=daily.dat,fill="dodgerblue",color="grey",
-               aes(x=yfk_final_date,y=n,group=spawn_year,
-                   text=str_c(" Date:",yfk_final_date,
+      geom_col(data=daily.dat,fill="dodgerblue",color="black",
+               aes(x=yfk_entry_date,y=n,group=spawn_year,
+                   text=str_c(" Date:",yfk_entry_date,
                               "<br>","Number Steelhead Entered:",n,
                               sep=" ")))+
       scale_x_date(date_breaks = "1 week", date_labels="%b %d",

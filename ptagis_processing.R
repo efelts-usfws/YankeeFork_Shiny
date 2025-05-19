@@ -133,19 +133,21 @@ yfk_individuals.summary <- yfk_detections.dat |>
             yfk_diff=as.numeric(yfk_entry_final-yfk_first,units="days"),
             length_mm=mean(length_mm,na.rm=T),
             release_lifestage=first(release_lifestage)) |>  
-  left_join(dat.mark,by="pit_id")
+  left_join(dat.mark,by="pit_id") |> 
+  mutate(species="Steelhead")
 
 
 yfk_entry.summary <- yfk_individuals.summary |>  
-  mutate(yfk_final_date=as_date(yfk_entry_final))  |>  
-  group_by(yfk_final_date)  |>  
+  mutate(yfk_entry_date=as_date(yfk_first))  |>  
+  group_by(yfk_entry_date)  |>  
   summarise(n=n()) |>  
   ungroup() |>  
   mutate(sy_total=sum(n),
          cumulative_total=cumsum(n),
          daily_prop=n/sy_total,
          daily_cumulative=cumsum(daily_prop),
-         spawn_year=2025)
+         spawn_year=2025) |> 
+  mutate(species="Steelhead")
 
 # get numbers by location as well
 
@@ -156,6 +158,92 @@ yfk_location.summary <- yfk_detections.dat |>
   left_join(ptagis.dat,by=c("release_sitecode"="site_code"))
 
 
+# add in chinook part; 
+
+chn_yfk_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efelts60/file/YFK%20CHN.csv",
+                                delim = ",",
+                                locale = locale(encoding= "UTF-16LE"))|>
+  mutate(observation_sitecode=word(`Site`,1,sep=" "),
+          release_sitecode=word(`Release Site`,1,sep=" "),
+          observation_datetime=as.POSIXct(`Obs Time`,
+                                          format = "%m/%d/%Y %I:%M:%S %p",
+                                          tz = "America/Los_Angeles"),
+          observation_month=month(observation_datetime),
+          observation_year=year(observation_datetime),
+          spawn_year=observation_year,
+          release_datetime=mdy(`Release Date`),
+          release_year=year(release_datetime),
+          yrs_at_large=observation_year-release_year) |>
+  select(pit_id=`Tag`,rear_type=`Rear Type Code`,
+          release_sitecode,release_lifestage=`Mark Life Stage`,
+          release_datetime,release_year,observation_sitecode,
+          observation_datetime,observation_month,
+          observation_year,yrs_at_large,spawn_year,
+          length_mm=`Mark Length`) |>
+  mutate(most_recent=max(spawn_year,na.rm=T)) |>
+  filter(!(yrs_at_large==0 & release_lifestage=="Juvenile"),
+         !(yrs_at_large==1 & release_sitecode=="YANKFK"))
+
+
+# bring in chinook downstream detections, mainly
+# using these to filter out any potential ghost
+# detections
+
+
+chn_downstream_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efelts60/file/YFK%20Chinook%20Downstream.csv",
+                                       delim = ",",
+                                       locale = locale(encoding= "UTF-16LE")) |> 
+  select(pit_id=`Tag`)
+
+
+chn_yfk_downstream.filter <- chn_downstream_detections.dat |> 
+  distinct()
+
+chn_yfk_juvenile.filter <- chn_yfk_detections.dat |> 
+  filter(release_lifestage=="Juvenile",
+         release_sitecode=="YANKFK") |> 
+  distinct(pit_id) %>% 
+  filter(!pit_id %in% chn_yfk_downstream.filter$pit_id)
+
+
+chn_dat.mark <- chn_yfk_detections.dat |> 
+  group_by(pit_id) |> 
+  summarize(release_sitecode=first(release_sitecode),
+            release_datetime=first(release_datetime))|> 
+  filter(!pit_id %in% chn_yfk_juvenile.filter$pit_id)
+
+
+# now get individual summaries for chinook
+
+chn_yfk_individuals.summary <- chn_yfk_detections.dat |> 
+  filter(!pit_id %in% chn_yfk_juvenile.filter$pit_id) |> 
+  mutate(yfk=ifelse(observation_sitecode %in% yfk_logical,TRUE,
+                    FALSE),
+         yfk_entry=ifelse(observation_sitecode %in% yfkentry_logical,
+                          TRUE,FALSE)) %>% 
+  group_by(pit_id)  |>  
+  summarize(yfk_first=first(observation_datetime[yfk==TRUE]),
+            yfk_entry_final=last(observation_datetime[yfk_entry==TRUE]),
+            yfk_diff=as.numeric(yfk_entry_final-yfk_first,units="days"),
+            length_mm=mean(length_mm,na.rm=T),
+            release_lifestage=first(release_lifestage),
+            release_sitecode=first(release_sitecode),
+            release_datetime=first(release_datetime)) |> 
+  mutate(species="Chinook")
+
+
+
+chn_yfk_entry.summary <- chn_yfk_individuals.summary |>  
+  mutate(yfk_entry_date=as_date(yfk_first))  |>  
+  group_by(yfk_entry_date)  |>  
+  summarise(n=n()) |>  
+  ungroup() |>  
+  mutate(sy_total=sum(n),
+         cumulative_total=cumsum(n),
+         daily_prop=n/sy_total,
+         daily_cumulative=cumsum(daily_prop),
+         spawn_year=2025) |> 
+  mutate(species="Chinook")
 
 # now also grab yfk water data from USGS gaging station
 
@@ -192,15 +280,27 @@ yfk.dat <-yfk.daily |>
 
 saveRDS(yfk.dat,"data/yfk_flow")
 
+# for individuals bind together species
+
+# save species separately
 
 saveRDS(yfk_individuals.summary,
-              "data/individuals")
+        "data/individuals")
 
-saveRDS(yfk_location.summary,
-              "data/locations")
+saveRDS(chn_yfk_individuals.summary,
+              "data/individuals_chn")
+
+# save entr summaries separately
+
+# bind summaries together for species
+
 
 saveRDS(yfk_entry.summary,
               "data/daily")
+
+saveRDS(chn_yfk_entry.summary,
+        "data/daily_chn")
+
 
 # right now the complete range won't update 
 # programatically as new spawn years are added;
@@ -210,10 +310,10 @@ saveRDS(yfk_entry.summary,
 complete_daily <- readRDS("data/daily_completed") |> 
   filter(spawn_year<first(yfk_entry.summary$spawn_year)) |> 
   ungroup() |> 
-  complete(yfk_final_date=seq(as_date("2012-07-01"),as_date("2024-06-30"),
+  complete(yfk_entry_date=seq(as_date("2012-07-01"),as_date("2024-06-30"),
                               by="day")) |> 
-  mutate(obs_year=year(yfk_final_date),
-         obs_month=month(yfk_final_date),
+  mutate(obs_year=year(yfk_entry_date),
+         obs_month=month(yfk_entry_date),
          spawn_year=ifelse(obs_month>6,(obs_year+1),
                                       obs_year)) |> 
   group_by(spawn_year) |> 
@@ -223,7 +323,7 @@ complete_daily <- readRDS("data/daily_completed") |>
          daily_prop=n/sy_total,
          daily_cumulative=cumsum(daily_prop),
          daily_percent=daily_cumulative*100) %>% 
-  mutate(day_of_year=yday(yfk_final_date),
+  mutate(day_of_year=yday(yfk_entry_date),
          dummy_entry_date=if_else(day_of_year<182,
                                     as.Date(day_of_year,origin="1977-12-31"),
                                     as.Date(day_of_year,origin="1976-12-31"))) |> 
@@ -248,10 +348,10 @@ complete_reference <- complete_daily %>%
 
 
 complete_current <- yfk_entry.summary %>% 
-  complete(yfk_final_date=seq(as_date("2024-07-01"),today(),
+  complete(yfk_entry_date=seq(as_date("2024-07-01"),today(),
                              by="day")) %>% 
-  mutate(obs_year=year(yfk_final_date),
-         obs_month=month(yfk_final_date),
+  mutate(obs_year=year(yfk_entry_date),
+         obs_month=month(yfk_entry_date),
          spawn_year=ifelse(obs_month>6,(obs_year+1),
                            obs_year))%>% 
   group_by(spawn_year) %>% 
@@ -260,17 +360,17 @@ complete_current <- yfk_entry.summary %>%
          daily_prop=n/sy_total,
          daily_cumulative=cumsum(daily_prop),
          daily_percent=daily_cumulative*100) %>% 
-  mutate(day_of_year=yday(yfk_final_date),
+  mutate(day_of_year=yday(yfk_entry_date),
          dummy_entry_date=if_else(day_of_year<182,
                                     as.Date(day_of_year,origin="1977-12-31"),
                                     as.Date(day_of_year,origin="1976-12-31"))) %>% 
   filter(!day_of_year==182) %>% 
-  select(spawn_year,yfk_final_date,n,dummy_entry_date) %>% 
+  select(spawn_year,yfk_entry_date,n,dummy_entry_date) %>% 
   mutate(daily_cumulative_n=cumsum(n))
 
 
 projected_totals <- complete_current %>% 
-  slice(which.max(yfk_final_date)) %>% 
+  slice(which.max(yfk_entry_date)) %>% 
   left_join(complete_reference,by="dummy_entry_date") %>% 
   mutate(max_sy_total=daily_cumulative_n/min_cum,
          median_sy_total=daily_cumulative_n/median_cum,
@@ -284,12 +384,12 @@ projected_totals <- complete_current %>%
 # make the projections points that can go on the plot
 
 projected_pts <- projected_totals %>% 
-  mutate(yfk_final=as_date("2025-06-01"),
+  mutate(yfk_entry=as_date("2025-06-01"),
          dummy_sfentry_date=as_date("1978-06-01"))
 
 
 alldaily <- complete_daily %>% 
-  select(spawn_year,yfk_final_date,n,dummy_entry_date,
+  select(spawn_year,yfk_entry_date,n,dummy_entry_date,
          daily_cumulative_n=daily_running_total) %>% 
   bind_rows(complete_current)
 
@@ -297,3 +397,82 @@ alldaily <- complete_daily %>%
 
 saveRDS(alldaily,"data/alldaily")
 saveRDS(projected_pts,"data/projections")
+
+# chinook projection stuff
+
+chn_complete_daily <- readRDS("data/daily_completed_chn") |>  
+  filter(spawn_year<first(chn_yfk_entry.summary$spawn_year)) |> 
+  ungroup() |> 
+  complete(yfk_entry_date=seq(as_date("2013-01-01"),as_date("2024-12-31"),
+                              by="day")) |> 
+  mutate(obs_year=year(yfk_entry_date),
+         obs_month=month(yfk_entry_date),
+         spawn_year=obs_year) |> 
+  group_by(spawn_year) |> 
+  fill(sy_total,.direction="updown") |> 
+  mutate(n=ifelse(is.na(n),0,n),
+         daily_running_total=cumsum(n),
+         daily_prop=n/sy_total,
+         daily_cumulative=cumsum(daily_prop),
+         daily_percent=daily_cumulative*100) %>% 
+  mutate(day_of_year=yday(yfk_entry_date),
+         dummy_entry_date= as.Date(day_of_year,origin="1976-12-31")) |> 
+  filter(!day_of_year==366) |> 
+  mutate(plot_category="Completed Spawn Years") |> 
+  filter(spawn_year>2012)
+
+chn_complete_reference <- chn_complete_daily %>% 
+  group_by(dummy_entry_date) %>% 
+  summarize(median_cum=median(daily_cumulative),
+            min_cum=min(daily_cumulative),
+            max_cum=max(daily_cumulative),
+            min_dailyprop=min(daily_prop),
+            median_dailyprop=median(daily_prop),
+            max_daily_prop=max(daily_prop))
+
+chn_complete_current <- chn_yfk_entry.summary %>% 
+  complete(yfk_entry_date=seq(as_date("2025-01-01"),today(),
+                              by="day")) %>% 
+  mutate(obs_year=year(yfk_entry_date),
+         obs_month=month(yfk_entry_date),
+         spawn_year=obs_year)%>% 
+  group_by(spawn_year) %>% 
+  mutate(n=ifelse(is.na(n),0,n),
+         daily_running_total=cumsum(n),
+         daily_prop=n/sy_total,
+         daily_cumulative=cumsum(daily_prop),
+         daily_percent=daily_cumulative*100) %>% 
+  mutate(day_of_year=yday(yfk_entry_date),
+         dummy_entry_date=as.Date(day_of_year,origin="1976-12-31")) %>% 
+  filter(!day_of_year==366) %>% 
+  select(spawn_year,yfk_entry_date,n,dummy_entry_date) %>% 
+  mutate(daily_cumulative_n=cumsum(n))
+
+chn_projected_totals <- chn_complete_current %>% 
+  slice(which.max(yfk_entry_date)) %>% 
+  left_join(chn_complete_reference,by="dummy_entry_date") %>% 
+  mutate(max_sy_total=daily_cumulative_n/min_cum,
+         median_sy_total=daily_cumulative_n/median_cum,
+         min_sy_total=daily_cumulative_n/max_cum) %>% 
+  select(spawn_year,min_sy_total,median_sy_total,
+         max_sy_total) %>% 
+  pivot_longer(min_sy_total:max_sy_total,
+               values_to = "sy_total") %>% 
+  mutate(projection_category=str_to_title(word(name,1,sep="_")))
+
+# make the projections points that can go on the plot
+
+chn_projected_pts <- chn_projected_totals %>% 
+  mutate(yfk_entry=as_date("2025-09-15"),
+         dummy_sfentry_date=as_date("1978-09-15"))
+
+
+chn_alldaily <- chn_complete_daily %>% 
+  select(spawn_year,yfk_entry_date,n,dummy_entry_date,
+         daily_cumulative_n=daily_running_total) %>% 
+  bind_rows(chn_complete_current)
+
+# save additional parts to include in the shiny app
+
+saveRDS(chn_alldaily,"data/alldaily_chn")
+saveRDS(chn_projected_pts,"data/projections_chn")

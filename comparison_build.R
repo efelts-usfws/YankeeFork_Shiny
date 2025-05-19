@@ -168,11 +168,11 @@ yfkindividuals_completedyrs <- summary.dat |>
 # the run should be complete on a given day
 
 yfk_entry_daily <- yfkindividuals_completedyrs |> 
-  mutate(yfk_final_date=as_date(yfk_entry_final)) |> 
+  mutate(yfk_entry_date=as_date(yfk_first)) |> 
   group_by(spawn_year) |> 
   mutate(sy_total=n()) |> 
   ungroup() |> 
-  group_by(yfk_final_date) |> 
+  group_by(yfk_entry_date) |> 
   summarize(spawn_year=first(spawn_year),
             n=n(),
             sy_total=first(sy_total)) |>
@@ -273,22 +273,18 @@ chn_yfkindividuals_completedyrs <- chn_summary.dat |>
 
 # that's the data frame that will be used to plot so save here
 
-
-yfkindividuals_completedyrs_bind <- bind_rows(yfkindividuals_completedyrs,
-                                              chn_yfkindividuals_completedyrs)
-
-saveRDS(yfkindividuals_completedyrs_bind,
-        "data/individuals_completed_bind")
+saveRDS(chn_yfkindividuals_completedyrs,
+        "data/individuals_completed_chn")
 
 # now summarize by day to be able to make
 # projections
 
 chn_yfk_entry_daily <- chn_yfkindividuals_completedyrs |> 
-  mutate(yfk_final_date=as_date(yfk_entry_final)) |> 
+  mutate(yfk_entry_date=as_date(yfk_first)) |> 
   group_by(spawn_year) |> 
   mutate(sy_total=n()) |> 
   ungroup() |> 
-  group_by(yfk_final_date) |> 
+  group_by(yfk_entry_date) |> 
   summarize(spawn_year=first(spawn_year),
             n=n(),
             sy_total=first(sy_total)) |>
@@ -298,10 +294,6 @@ chn_yfk_entry_daily <- chn_yfkindividuals_completedyrs |>
          daily_cumulative=daily_running_total/sy_total) |> 
   mutate(species="Chinook")
 
-# bind species together and export
 
-yfk_entry_daily_bind <- bind_rows(yfk_entry_daily,
-                                  chn_yfk_entry_daily)
-
-saveRDS(yfk_entry_daily_bind,
-        "data/daily_completed_bind")
+saveRDS(chn_yfk_entry_daily,
+        "data/daily_completed_chn")
