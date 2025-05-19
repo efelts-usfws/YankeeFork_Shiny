@@ -133,8 +133,11 @@ lf.dat <- individuals.dat %>%
 
 slider_min <- as.Date(min(individuals.dat$yfk_entry_final))
 
-lastweek <- individuals.dat %>% 
+lastweek_detections <- individuals.dat %>% 
   filter(yfk_entry_final>=today()-days(7))
+
+lastweek_new <- individuals.dat %>% 
+  filter(yfk_first>=today()-days(7))
 
 # find two weeks prior to the first PIT tag
 # detection for the year, so that can
@@ -194,8 +197,9 @@ ui <- page_navbar(
               
               value_box(
                 title="New in the Last Week",
-                value=nrow(lastweek),
-                showcase=bs_icon("graph-up-arrow")
+                value=nrow(lastweek_new),
+                showcase=bs_icon("graph-up-arrow"),
+                p(str_c("Unique Individuals at Array: ",nrow(lastweek_detections)))
                 
                 
                 
