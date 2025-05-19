@@ -179,7 +179,8 @@ yfk_entry_daily <- yfkindividuals_completedyrs |>
   group_by(spawn_year) |> 
   mutate(daily_running_total=cumsum(n),
          daily_prop=n/sy_total,
-         daily_cumulative=daily_running_total/sy_total)
+         daily_cumulative=daily_running_total/sy_total) |> 
+  mutate(species="Steelhead")
 
 # that's the data frame that will get used in constructing
 # descriptions of where current year is relative to the
@@ -278,3 +279,29 @@ yfkindividuals_completedyrs_bind <- bind_rows(yfkindividuals_completedyrs,
 
 saveRDS(yfkindividuals_completedyrs_bind,
         "data/individuals_completed_bind")
+
+# now summarize by day to be able to make
+# projections
+
+chn_yfk_entry_daily <- chn_yfkindividuals_completedyrs |> 
+  mutate(yfk_final_date=as_date(yfk_entry_final)) |> 
+  group_by(spawn_year) |> 
+  mutate(sy_total=n()) |> 
+  ungroup() |> 
+  group_by(yfk_final_date) |> 
+  summarize(spawn_year=first(spawn_year),
+            n=n(),
+            sy_total=first(sy_total)) |>
+  group_by(spawn_year) |> 
+  mutate(daily_running_total=cumsum(n),
+         daily_prop=n/sy_total,
+         daily_cumulative=daily_running_total/sy_total) |> 
+  mutate(species="Chinook")
+
+# bind species together and export
+
+yfk_entry_daily_bind <- bind_rows(yfk_entry_daily,
+                                  chn_yfk_entry_daily)
+
+saveRDS(yfk_entry_daily_bind,
+        "data/daily_completed_bind")
