@@ -43,10 +43,16 @@ yfk.dat <- ptagis.dat |>
 # as juveniles that are detected in the 
 # same year as tagging
 
-# reead in data from web API where scheduled
+# assign spawn year based on species and the date
+# the code runs
+
+julian_today <- yday(today())
+
+
+# read in data from web API where scheduled
 # query of the PIT tag array is stored
 
-yfk_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efelts60/file/YFK%20STHD.csv",
+yfk_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efelts60/file/YFK%20All.csv",
             delim = ",",
             locale = locale(encoding= "UTF-16LE")) %>% 
   mutate(observation_sitecode=word(`Site`,1,sep=" "),
@@ -60,45 +66,68 @@ yfk_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efe
                            observation_year),
          release_datetime=mdy(`Release Date`),
          release_year=year(release_datetime),
-         yrs_at_large=observation_year-release_year) %>% 
+         yrs_at_large=observation_year-release_year,
+         species=`Species Name`) %>% 
   select(pit_id=Tag,rear_type=`Rear Type Code`,
          release_sitecode,release_lifestage=`Mark Life Stage`,
          release_datetime,release_year,observation_sitecode,
          observation_datetime,observation_month,
          observation_year,yrs_at_large,spawn_year,
+         species,
          length_mm=`Mark Length`) |> 
+  mutate(spawn_year=case_when(
+    yday(observation_datetime)>=183 & species=="Steelhead" ~ observation_year+1,
+    TRUE ~ observation_year
+  )) |> 
+  group_by(species) |> 
   mutate(most_recent=max(spawn_year,na.rm=T)) |> 
-  filter(spawn_year==most_recent) %>% 
-  filter(yrs_at_large!=0 | release_lifestage != "Juvenile")
+  filter(spawn_year==most_recent)
 
 
+  # where were juveniles marked?
+  
+  juv_mark.sum <- yfk_detections.dat |> 
+    group_by(species,release_sitecode,
+             release_year,release_lifestage) |> 
+    tally()
+  
 # bring in query from API that searches for YFK
-# fish detected downstream in the hydrosystem
+# fish detected downstream in the hydrosystem and
+  # get their latest detection by PIT id
 
-downstream_detections.dat <-  vroom(file = "https://api.ptagis.org/reporting/reports/efelts60/file/YFK%20Steelhead%20Downstream.csv",
+downstream_detections.dat <-  vroom(file = "https://api.ptagis.org/reporting/reports/efelts60/file/YFK%20All%20Downstream.csv",
                                     delim = ",",
                                     locale = locale(encoding= "UTF-16LE")) |>  
-  select(pit_id=Tag)
+  mutate(observation_sitecode=word(`Site`,1,sep=" "),
+        release_sitecode=word(`Release Site`,1,sep=" "),
+        observation_datetime=as.POSIXct(`Obs Time`,
+                                        format = "%m/%d/%Y %I:%M:%S %p", 
+                                        tz = "America/Los_Angeles")) |> 
+  group_by(Tag) |> 
+  slice(which.max(observation_datetime)) |> 
+  select(pit_id=Tag,
+         latest_downstream=observation_datetime)
 
 
   
-# grab all distinct pit ids from downstream
+# # grab all distinct pit ids from downstream
+# 
+# yfk_downstream.filter <- downstream_detections.dat |> 
+#   distinct(pit_id)
 
-yfk_downstream.filter <- downstream_detections.dat |> 
-  distinct(pit_id)
 
-
-# pull out detections at YFK that were juveniles
-# originally marked at YFK and find
+# pull out detections at YFK that were marked as
+# juveniles and drop
 # any that don't appear in the downstream detections 
-# query; these are the ones to drop, will likely
-# be 0
+# prior to their latest detection at the YFK array
 
 yfk_juvenile.filter <- yfk_detections.dat %>% 
-  filter(release_lifestage=="Juvenile",
-         release_sitecode=="YANKFK") |> 
-  distinct(pit_id) %>% 
-  filter(!pit_id %in% yfk_downstream.filter$pit_id)
+  filter(release_lifestage=="Juvenile") |> 
+ group_by(pit_id) %>% 
+ slice(which.max(observation_datetime)) |> 
+ inner_join(downstream_detections.dat,by="pit_id") |> 
+  filter(latest_downstream<observation_datetime)
+
 
 
 # now summarize relevant values and pull
@@ -106,9 +135,8 @@ yfk_juvenile.filter <- yfk_detections.dat %>%
 
 dat.mark <- yfk_detections.dat  |>  
   group_by(pit_id)  |> 
-  summarize(release_sitecode=first(release_sitecode),
-            release_datetime=first(release_datetime))  |>  
-  filter(!pit_id %in% yfk_juvenile.filter$pit_id)
+  summarize(species=first(species),release_sitecode=first(release_sitecode),
+            release_datetime=first(release_datetime)) 
 
 # took the granite part out, could definitely add
 # it back, probably will once I work the other stuff out,
@@ -122,7 +150,8 @@ yfk_logical <- c("YFK","YANKFK")
 yfkentry_logical <- c("YFK")
 
 yfk_individuals.summary <- yfk_detections.dat |> 
-  filter(!pit_id %in% yfk_juvenile.filter$pit_id) |>  
+  filter(pit_id %in% yfk_juvenile.filter$pit_id|
+           release_lifestage=="Adult") |>  
   mutate(yfk=ifelse(observation_sitecode %in% yfk_logical,TRUE,
                    FALSE),
          yfk_entry=ifelse(observation_sitecode %in% yfkentry_logical,
@@ -133,117 +162,27 @@ yfk_individuals.summary <- yfk_detections.dat |>
             yfk_diff=as.numeric(yfk_entry_final-yfk_first,units="days"),
             length_mm=mean(length_mm,na.rm=T),
             release_lifestage=first(release_lifestage)) |>  
-  left_join(dat.mark,by="pit_id") |> 
-  mutate(species="Steelhead")
+  left_join(dat.mark,by="pit_id") 
 
 
 yfk_entry.summary <- yfk_individuals.summary |>  
   mutate(yfk_entry_date=as_date(yfk_first))  |>  
-  group_by(yfk_entry_date)  |>  
+  group_by(yfk_entry_date,species)  |>  
   summarise(n=n()) |>  
-  ungroup() |>  
+  group_by(species) |>  
   mutate(sy_total=sum(n),
          cumulative_total=cumsum(n),
          daily_prop=n/sy_total,
-         daily_cumulative=cumsum(daily_prop),
-         spawn_year=2025) |> 
-  mutate(species="Steelhead")
+         daily_cumulative=cumsum(daily_prop)) 
 
 # get numbers by location as well
 
 yfk_location.summary <- yfk_detections.dat |> 
-  group_by(pit_id)  |>  
+  group_by(pit_id,species)  |>  
   summarize(release_sitecode=first(release_sitecode),
             release_lifestage=first(release_lifestage))  |>  
   left_join(ptagis.dat,by=c("release_sitecode"="site_code"))
 
-
-# add in chinook part; 
-
-chn_yfk_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efelts60/file/YFK%20CHN.csv",
-                                delim = ",",
-                                locale = locale(encoding= "UTF-16LE"))|>
-  mutate(observation_sitecode=word(`Site`,1,sep=" "),
-          release_sitecode=word(`Release Site`,1,sep=" "),
-          observation_datetime=as.POSIXct(`Obs Time`,
-                                          format = "%m/%d/%Y %I:%M:%S %p",
-                                          tz = "America/Los_Angeles"),
-          observation_month=month(observation_datetime),
-          observation_year=year(observation_datetime),
-          spawn_year=observation_year,
-          release_datetime=mdy(`Release Date`),
-          release_year=year(release_datetime),
-          yrs_at_large=observation_year-release_year) |>
-  select(pit_id=`Tag`,rear_type=`Rear Type Code`,
-          release_sitecode,release_lifestage=`Mark Life Stage`,
-          release_datetime,release_year,observation_sitecode,
-          observation_datetime,observation_month,
-          observation_year,yrs_at_large,spawn_year,
-          length_mm=`Mark Length`) |>
-  mutate(most_recent=max(spawn_year,na.rm=T)) |>
-  filter(!(yrs_at_large==0 & release_lifestage=="Juvenile"),
-         !(yrs_at_large==1 & release_sitecode=="YANKFK"))
-
-
-# bring in chinook downstream detections, mainly
-# using these to filter out any potential ghost
-# detections
-
-
-chn_downstream_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efelts60/file/YFK%20Chinook%20Downstream.csv",
-                                       delim = ",",
-                                       locale = locale(encoding= "UTF-16LE")) |> 
-  select(pit_id=`Tag`)
-
-
-chn_yfk_downstream.filter <- chn_downstream_detections.dat |> 
-  distinct()
-
-chn_yfk_juvenile.filter <- chn_yfk_detections.dat |> 
-  filter(release_lifestage=="Juvenile",
-         release_sitecode=="YANKFK") |> 
-  distinct(pit_id) %>% 
-  filter(!pit_id %in% chn_yfk_downstream.filter$pit_id)
-
-
-chn_dat.mark <- chn_yfk_detections.dat |> 
-  group_by(pit_id) |> 
-  summarize(release_sitecode=first(release_sitecode),
-            release_datetime=first(release_datetime))|> 
-  filter(!pit_id %in% chn_yfk_juvenile.filter$pit_id)
-
-
-# now get individual summaries for chinook
-
-chn_yfk_individuals.summary <- chn_yfk_detections.dat |> 
-  filter(!pit_id %in% chn_yfk_juvenile.filter$pit_id) |> 
-  mutate(yfk=ifelse(observation_sitecode %in% yfk_logical,TRUE,
-                    FALSE),
-         yfk_entry=ifelse(observation_sitecode %in% yfkentry_logical,
-                          TRUE,FALSE)) %>% 
-  group_by(pit_id)  |>  
-  summarize(yfk_first=first(observation_datetime[yfk==TRUE]),
-            yfk_entry_final=last(observation_datetime[yfk_entry==TRUE]),
-            yfk_diff=as.numeric(yfk_entry_final-yfk_first,units="days"),
-            length_mm=mean(length_mm,na.rm=T),
-            release_lifestage=first(release_lifestage),
-            release_sitecode=first(release_sitecode),
-            release_datetime=first(release_datetime)) |> 
-  mutate(species="Chinook")
-
-
-
-chn_yfk_entry.summary <- chn_yfk_individuals.summary |>  
-  mutate(yfk_entry_date=as_date(yfk_first))  |>  
-  group_by(yfk_entry_date)  |>  
-  summarise(n=n()) |>  
-  ungroup() |>  
-  mutate(sy_total=sum(n),
-         cumulative_total=cumsum(n),
-         daily_prop=n/sy_total,
-         daily_cumulative=cumsum(daily_prop),
-         spawn_year=2025) |> 
-  mutate(species="Chinook")
 
 # now also grab yfk water data from USGS gaging station
 
@@ -476,3 +415,20 @@ chn_alldaily <- chn_complete_daily %>%
 
 saveRDS(chn_alldaily,"data/alldaily_chn")
 saveRDS(chn_projected_pts,"data/projections_chn")
+# 
+# 
+# library(readr)
+# 
+# chn.test <- read_csv("data/yfk_chn25.csv") |> 
+#   mutate(release_datetime=mdy(`Release Date MMDDYYYY`),
+#          obs_datetime=mdy_hms(`Obs Time Value`),
+#          release_year=year(release_datetime)) |> 
+#   select(pit_id=`Tag Code`,release_datetime,obs_datetime,
+#          release_year, release_lifestage=`Mark Life Stage Value`,
+#          release_site=`Release Site Name`) |> 
+#   group_by(pit_id) |> 
+#   slice(which.max(obs_datetime)) |> 
+#   ungroup() |> 
+#   filter(release_lifestage=="Adult")
+#   group_by(release_year,release_lifestage) |> 
+#   tally()
