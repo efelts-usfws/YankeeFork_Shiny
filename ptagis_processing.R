@@ -225,9 +225,9 @@ saveRDS(yfk.dat,"data/yfk_flow")
 
 saveRDS(yfk_individuals.summary,
         "data/individuals")
-
-saveRDS(chn_yfk_individuals.summary,
-              "data/individuals_chn")
+# 
+# saveRDS(chn_yfk_individuals.summary,
+#               "data/individuals_chn")
 
 # save entr summaries separately
 
@@ -236,9 +236,9 @@ saveRDS(chn_yfk_individuals.summary,
 
 saveRDS(yfk_entry.summary,
               "data/daily")
-
-saveRDS(chn_yfk_entry.summary,
-        "data/daily_chn")
+# 
+# saveRDS(chn_yfk_entry.summary,
+#         "data/daily_chn")
 
 
 # right now the complete range won't update 
