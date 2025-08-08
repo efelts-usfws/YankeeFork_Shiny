@@ -34,7 +34,11 @@ individuals.dat <- readRDS("data/individuals")
 
 individuals.export <- individuals.dat |> 
   select(pit_id,species,release_lifestage,release_sitecode,
-         release_datetime,length_mm,yfk_entry=yfk_entry_final)
+         release_datetime,length_mm,yfk_entry=yfk_entry_final) |> 
+  mutate(observation_year=year(yfk_entry),
+         spawn_year=case_when(
+           yday(yfk_entry)>=183 & species=="Steelhead" ~ observation_year+1,
+           TRUE ~ observation_year))
 
 # compute summaries of where individuals were marked;
 # bring PTAGIS metadata in to get full names
@@ -44,7 +48,7 @@ ptagis.dat <- readRDS("data/ptagis_sites")
 
 mark.summary <- individuals.dat |> 
   left_join(ptagis.dat,by=c("release_sitecode"="site_code")) |> 
-  group_by(release_sitecode,release_lifestage) |> 
+  group_by(species,release_sitecode,release_lifestage) |> 
   summarize(n=n(),
             site_name=first(site_name)) |> 
   arrange(-n) |> 
@@ -53,11 +57,21 @@ mark.summary <- individuals.dat |>
          `Life Stage at Marking`=release_lifestage,
          Count=n)
 
+sy_current <- tibble(species=c("Steelhead","Chinook",
+                               "Bull Trout")) |> 
+  mutate(today.year=year(today()),
+         today.jday=yday(today()),
+         today_spawn_year=case_when(
+           species == "Steelhead"& today.jday>=183 ~ today.year+1,
+           TRUE ~ today.year))
+
 alldaily.dat <- readRDS("data/alldaily") |> 
   filter(spawn_year>2012) |> 
-  mutate(yr_category=ifelse(spawn_year==first(daily.dat$spawn_year),
+  left_join(sy_current,by=c("species")) |> 
+  mutate(yr_category=ifelse(spawn_year==today_spawn_year,
                             "Current","Previous"))
-
+  
+  
 projection.dat <- readRDS("data/projections")
 
 # calculate estimate of how much of the run is complete
@@ -65,25 +79,23 @@ projection.dat <- readRDS("data/projections")
 run_stats <- alldaily.dat |> 
   filter(spawn_year<year(today()),
          spawn_year>2012) |> 
-  group_by(spawn_year) |> 
+  group_by(spawn_year,species) |> 
   mutate(total_n=sum(n),
          prop_complete=daily_cumulative_n/total_n) |> 
-  group_by(dummy_entry_date) |> 
+  group_by(dummy_date,species) |> 
   summarize(median_percentcomplete=round(median(prop_complete)*100),
             min_percentcomplete=round(min(prop_complete)*100),
             max_percentcomplete=round(max(prop_complete)*100))
 
+test_min <- alldaily.dat |> 
+  group_by(species,spawn_year) |> 
+  summarize(earliest=min(yfk_entry_date,na.rm=T))
 
-today_dummy <- tibble(date=today()) |> 
-  mutate(doy=yday(date),
-         dummy=if_else(doy<182,
-                       as.Date(doy,origin="1977-12-31"),
-                       as.Date(doy,origin="1976-12-31"))) |> 
-  pull(dummy)
-
+today_dummy <- as.Date(yday(today())-1,
+                       origin="1976-01-01")
 
 today_run <- run_stats |> 
-  filter(dummy_entry_date==today_dummy)
+  filter(dummy_date==today_dummy)
 
 # lifestage_pal <- colorFactor(palette=c("cyan","magenta"),
 #                              levels=c("Juvenile","Adult"))
@@ -122,10 +134,11 @@ today_run <- run_stats |>
 lf.dat <- individuals.dat %>% 
   filter(release_lifestage=="Adult",
          !is.na(length_mm)) %>% 
+  group_by(species) |> 
   mutate(length_bin=floor(length_mm/25)*25) %>% 
   mutate(mean_length=mean(length_mm),
          total_n=n()) %>% 
-  group_by(length_bin) %>% 
+  group_by(species,length_bin) %>% 
   summarize(freq=n(),
             total_sample=first(total_n),
             mean_length=first(mean_length))

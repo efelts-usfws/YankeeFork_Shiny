@@ -56,6 +56,8 @@ dat <- read_csv("data/YFK All_Comparisons.csv") |>
              species %in% c("Steelhead","Chinook") ~ "Juvenile",
            is.na(release_lifestage) & length_mm > 300 &
              species %in% c("Steelhead","Chinook") ~ "Adult",
+           release_lifestage=="Adult" & length_mm<=300&
+             species %in% c("Steelhead","Chinook") ~ "Juvenile",
            is.na(release_lifestage) & is.na(length_mm)&
              species %in% c("Chinook","Steelhead")& release_sitecode %in% c("COLR3","LGRLDR")
            ~ "Adult",
@@ -230,6 +232,8 @@ yfkindividuals_completedyrs <- yfkindividuals_completedyrs |>
             release_datetime_correction)) |> 
   filter(species %in% c("Steelhead","Chinook",
                         "Bull Trout"))
+
+
 
 # now summarize by day so we can reference how much of 
 # the run should be complete on a given day
