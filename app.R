@@ -166,6 +166,17 @@ user_dates <-
               value=c(date_start,today()))
 
 
+# make the default species selection depend on 
+# today's date: if it's Jan-May, Steelhead, otherwise
+# chinook
+
+today_spp <- ifelse(
+  
+  month(today())>5, "Chinook",
+  "Steelhead"
+  
+)
+
 
 # build user interface
 
@@ -183,6 +194,15 @@ ui <- page_navbar(
                       
                       "Explore Data",
                       
+                      selectInput(inputId = "user_spp",
+                                  label = "Choose a Species",
+                                  choices = c("Steelhead",
+                                              "Chinook",
+                                              "Bull Trout"),
+                                  selected = today_spp,
+                                  selectize = FALSE
+                                  ),
+                      
                       user_dates,
                       
                       downloadBttn("download_ind",
@@ -194,15 +214,15 @@ ui <- page_navbar(
                   
                   ),
   
-  nav_panel("Steelhead",
+  nav_panel("PIT Tag Detections",
             
             
             layout_columns(
               
               value_box(
                 
-                title="Unique PIT Tagged Steelhead, SY 2025",
-                value=nrow(individuals.dat),
+                title="Unique PIT Tag Detections, Current SY",
+                value=textOutput("ind_count_txt"),
                 showcase=fa("fish-fins"),
                 
              
@@ -210,24 +230,23 @@ ui <- page_navbar(
               
               value_box(
                 title="New in the Last Week",
-                value=nrow(lastweek_new),
-                showcase=bs_icon("graph-up-arrow"),
-                p(str_c("Unique Individuals at Array: ",nrow(lastweek_detections)))
-                
-                
-                
-              ),
+                value=textOutput("lastweek_count_txt"),
+                showcase=bs_icon("graph-up-arrow"))
+
+
+
               
-              value_box(
-                title="Estimated Percent of Run Complete",
-                value=str_c(today_run$median_percentcomplete,"%",
-                            sep=" "),
-                showcase=bs_icon("circle-half"),
-                p(str_c("Range:",str_c(today_run$min_percentcomplete,"%",sep=" "),
-                        "-",
-                        str_c(today_run$max_percentcomplete,"%",sep=" "),
-                        sep=" "))
-              )
+              # 
+              # value_box(
+              #   title="Estimated Percent of Run Complete",
+              #   value=str_c(today_run$median_percentcomplete,"%",
+              #               sep=" "),
+              #   showcase=bs_icon("circle-half"),
+              #   p(str_c("Range:",str_c(today_run$min_percentcomplete,"%",sep=" "),
+              #           "-",
+              #           str_c(today_run$max_percentcomplete,"%",sep=" "),
+              #           sep=" "))
+              # )
               
             ),
             
@@ -244,24 +263,24 @@ ui <- page_navbar(
                 
                 card(card_header("Stream Temperature"),
                      plotlyOutput("temp_plot"),
-                     full_screen = T),
+                     full_screen = T)
                 
-                card(card_header("Year-to-date Totals"),
-                     plotlyOutput("comp_plot"),
-                     full_screen = T),
-                
-                card(card_header("Unique Fish In"),
-                     plotlyOutput("entry_plot"),
-                     full_screen = T),
-                
-                card(card_header("Length Frequency"),
-                     plotlyOutput("lf_plot"),
-                     full_screen = TRUE),
-                
-                card(card_header("Marking Locations"),
-                     DTOutput("marklocation_summary"),
-                     full_screen = TRUE)
-                
+                # card(card_header("Year-to-date Totals"),
+                #      plotlyOutput("comp_plot"),
+                #      full_screen = T),
+                # 
+                # card(card_header("Unique Fish In"),
+                #      plotlyOutput("entry_plot"),
+                #      full_screen = T),
+                # 
+                # card(card_header("Length Frequency"),
+                #      plotlyOutput("lf_plot"),
+                #      full_screen = TRUE),
+                # 
+                # card(card_header("Marking Locations"),
+                #      DTOutput("marklocation_summary"),
+                #      full_screen = TRUE)
+                # 
                 
               )
               
@@ -275,6 +294,49 @@ ui <- page_navbar(
 # build server side
 
 server <- function(input,output,session){
+  
+  # number of individuals needs to be reactive to 
+  # species selection
+  
+  ind.dat_reactive <- reactive({
+    
+    req(input$user_spp)
+    
+    dat <- individuals.dat |> 
+      filter(species==input$user_spp)
+    
+  })
+  
+  # make an output of the number of individuals to 
+  # got to the value box
+  
+  output$ind_count_txt <- renderText({
+    
+    nrow(req(ind.dat_reactive()))
+    
+  })
+  
+  # reactive for number of new in the last week
+  
+  lastweek_reactive <- reactive({
+    
+    req(input$user_spp)
+    
+    dat <- individuals.dat %>% 
+      filter(species==input$user_spp,
+             yfk_first>=today()-days(7))
+    
+    
+  })
+  
+  # make an output of the number new in last week to 
+  # got to the value box
+  
+  output$lastweek_count_txt <- renderText({
+    
+    nrow(req(lastweek_reactive()))
+    
+  })
   
   # make the flow plot as a reactive
   
@@ -478,7 +540,7 @@ server <- function(input,output,session){
     
     filename=function(){
       
-      paste("YFK_STHD_detections_",as.integer(today()),".csv",sep="")
+      paste("YFK_detections_",as.integer(today()),".csv",sep="")
       
     },
     
