@@ -69,7 +69,8 @@ alldaily.dat <- readRDS("data/alldaily") |>
   filter(spawn_year>2012) |> 
   left_join(sy_current,by=c("species")) |> 
   mutate(yr_category=ifelse(spawn_year==today_spawn_year,
-                            "Current","Previous"))
+                            "Current","Previous"),
+         dummy_jday=yday(dummy_date))
   
   
 projection.dat <- readRDS("data/projections")
@@ -147,14 +148,15 @@ lastweek_new <- individuals.dat %>%
 # detection for the year, so that can
 # be the start for the date filter
 
-date_start <- min(daily.dat$yfk_entry_date)-weeks(2)
+# date_start <- min(daily.dat$yfk_entry_date)-weeks(2)
+# 
+# user_dates <-     
+#   sliderInput(inputId = "user_dates",
+#               label="Choose a Date Range",
+#               min=as_date("2025-01-01"),
+#               max=today(),
+#               value=c(date_start,today()))
 
-user_dates <-     
-  sliderInput(inputId = "user_dates",
-              label="Choose a Date Range",
-              min=as_date("2025-01-01"),
-              max=today(),
-              value=c(date_start,today()))
 
 
 # make the default species selection depend on 
@@ -194,7 +196,7 @@ ui <- page_navbar(
                                   selectize = FALSE
                                   ),
                       
-                      user_dates,
+                      uiOutput("user_date_slider"),
                       
                       downloadBttn("download_ind",
                                    "Download Current Year Individual Summaries")
@@ -250,11 +252,11 @@ ui <- page_navbar(
                 
                 card(card_header("Stream Temperature"),
                      plotlyOutput("temp_plot"),
-                     full_screen = T)
+                     full_screen = T),
                 
-                # card(card_header("Year-to-date Totals"),
-                #      plotlyOutput("comp_plot"),
-                #      full_screen = T),
+                card(card_header("Year-to-date Totals"),
+                     plotlyOutput("comp_plot"),
+                     full_screen = T)
                 # 
                 # card(card_header("Unique Fish In"),
                 #      plotlyOutput("entry_plot"),
@@ -281,6 +283,41 @@ ui <- page_navbar(
 # build server side
 
 server <- function(input,output,session){
+  
+  # make the date slider reactive to species selection
+  
+  output$user_date_slider <- renderUI({
+    
+    req(input$user_spp)
+    
+    dat <- run_stats |> 
+      filter(species==input$user_spp)
+    
+    date_origin=ifelse(input$user_spp=="Steelhead",
+                       "1977-12-31","1976-12-31")
+    
+    slider_min <- as.Date(yday(min(dat$dummy_date)-months(1)),
+                          origin=date_origin)
+    
+    spp_max <- dat |> 
+      filter(min_percentcomplete==100) |> 
+      ungroup() |> 
+      slice(which.min(dummy_date)) |> 
+      pull(dummy_date)
+    
+    slider_max <- as.Date(yday(spp_max+months(1)),
+                          origin=date_origin)
+    
+    
+    sliderInput(inputId = "user_dates",
+                label="Choose a Date Range",
+                min=slider_min,
+                max=slider_max,
+                value=c(slider_min,slider_max),
+                timeFormat = "%b %d")
+    
+  })
+  
   
   # number of individuals needs to be reactive to 
   # species selection
@@ -424,6 +461,16 @@ server <- function(input,output,session){
     
   })
 
+  # make all daily data reactive to user selected species
+  
+  alldaily_reactive <- reactive({
+    
+    req(input$user_spp)
+    
+    alldaily.dat |> 
+      filter(species==input$user_spp)
+    
+  })
   
   # make a reactive plot of cumulative
   # numbers in; this is named comp plot bc
@@ -433,19 +480,24 @@ server <- function(input,output,session){
   
   compplot_reactive <- reactive({
     
-    plot_lim.dat <- tibble(min_doy=yday(min(input$user_dates)),
-                           max_doy=yday(max(input$user_dates))) |> 
-      mutate(plot_min=ifelse(min_doy<182,
-                             as.Date(min_doy,origin="1977-12-31"),
-                             as.Date(min_doy,origin="1976-12-31")),
-             plot_max=ifelse(max_doy<182,
-                             as.Date(max_doy,origin="1977-12-31"),
-                             as.Date(max_doy,origin="1976-12-31")))
+    req(input$user_spp)
+    req(input$user_dates)
     
-    comp_plot <- alldaily.dat %>% 
-      ggplot(aes(x=dummy_entry_date,y=daily_cumulative_n,
+    # plot_lim.dat <- tibble(min_doy=yday(min(input$user_dates)),
+    #                        max_doy=yday(max(input$user_dates))) |> 
+    #   mutate(plot_min=ifelse(min_doy<182,
+    #                          as.Date(min_doy,origin="1977-12-31"),
+    #                          as.Date(min_doy,origin="1976-12-31")),
+    #          plot_max=ifelse(max_doy<182,
+    #                          as.Date(max_doy,origin="1977-12-31"),
+    #                          as.Date(max_doy,origin="1976-12-31")))
+    # 
+    dat <- alldaily_reactive()
+    
+    comp_plot <-dat %>% 
+      ggplot(aes(x=dummy_date,y=daily_cumulative_n,
                  group=spawn_year,color=as.factor(yr_category)))+
-      geom_line(aes(text=str_c(" Date:",format(dummy_entry_date, "%b %d"),
+      geom_line(aes(text=str_c(" Date:",format(dummy_date, "%b %d"),
                                "<br>",
                                "Spawn Year:",spawn_year,
                                "<br>",
@@ -453,8 +505,8 @@ server <- function(input,output,session){
       theme_bw()+
       scale_color_manual(values=c("steelblue","gray70"))+
       theme(axis.text.x=element_text(angle=45,hjust=1))+
-      scale_x_date(date_breaks = "1 week", date_labels="%b %d",
-                    limits=c(as.Date(plot_lim.dat$plot_min),as.Date(plot_lim.dat$plot_max)))+
+      # scale_x_date(date_breaks = "1 week", date_labels="%b %d",
+      #               limits=c(min(input$user_dates),max(input)))+
       labs(x="Date to Yankee Fork Salmon River",
            y="# PIT Tags in Yankee Fork, Year-To-Date",
            color="")
