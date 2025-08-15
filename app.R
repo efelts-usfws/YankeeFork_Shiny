@@ -76,16 +76,7 @@ projection.dat <- readRDS("data/projections")
 
 # calculate estimate of how much of the run is complete
 
-run_stats <- alldaily.dat |> 
-  filter(spawn_year<year(today()),
-         spawn_year>2012) |> 
-  group_by(spawn_year,species) |> 
-  mutate(total_n=sum(n),
-         prop_complete=daily_cumulative_n/total_n) |> 
-  group_by(dummy_date,species) |> 
-  summarize(median_percentcomplete=round(median(prop_complete)*100),
-            min_percentcomplete=round(min(prop_complete)*100),
-            max_percentcomplete=round(max(prop_complete)*100))
+run_stats <- readRDS("data/run_stats")
 
 test_min <- alldaily.dat |> 
   group_by(species,spawn_year) |> 
@@ -231,22 +222,18 @@ ui <- page_navbar(
               value_box(
                 title="New in the Last Week",
                 value=textOutput("lastweek_count_txt"),
-                showcase=bs_icon("graph-up-arrow"))
+                showcase=bs_icon("graph-up-arrow")),
 
 
 
-              
-              # 
-              # value_box(
-              #   title="Estimated Percent of Run Complete",
-              #   value=str_c(today_run$median_percentcomplete,"%",
-              #               sep=" "),
-              #   showcase=bs_icon("circle-half"),
-              #   p(str_c("Range:",str_c(today_run$min_percentcomplete,"%",sep=" "),
-              #           "-",
-              #           str_c(today_run$max_percentcomplete,"%",sep=" "),
-              #           sep=" "))
-              # )
+
+
+              value_box(
+                title="Estimated Percent of Run Complete",
+                value=textOutput("todayrun_median"),
+                showcase=bs_icon("circle-half"),
+                p(textOutput("todayrun_range"))
+              )
               
             ),
             
@@ -335,6 +322,41 @@ server <- function(input,output,session){
   output$lastweek_count_txt <- renderText({
     
     nrow(req(lastweek_reactive()))
+    
+  })
+  
+  # reactive for percent of run complete as of today
+  
+  runstatus_reactive <- reactive({
+    
+    req(input$user_spp)
+    
+    dat <- today_run %>% 
+      filter(species==input$user_spp)
+    
+    
+  })
+  
+  # output for median percent complete today
+  
+  output$todayrun_median <- renderText({
+    
+   dat <- runstatus_reactive() |> 
+      pull(median_percentcomplete)
+   
+   str_c(dat,"%",sep=" ")
+    
+  })
+  
+  # output for range of percent complete today
+  
+  output$todayrun_range <- renderText({
+    
+    dat <- runstatus_reactive() 
+    
+    str_c("Range:",dat$min_percentcomplete,"%",
+          "-",
+          dat$max_percentcomplete,"%",sep=" ")
     
   })
   

@@ -262,6 +262,19 @@ species_max_dates <- tibble(
                      "1977-06-30"))
 )
 
+# need to set minimum dates also so that each observed year 
+# spans all the potential dates, i.e. earliest
+# that fish have been observed
+
+species_min_dates <- readRDS("data/daily_completed") |> 
+  mutate(day_of_year=yday(yfk_entry_date),
+         dummy_date=case_when(
+           species=="Steelhead"&day_of_year<183 ~ as.Date(day_of_year,origin="1977-01-01"),
+           TRUE ~ as.Date(day_of_year-1,origin="1976-01-01")
+         )) |> 
+  group_by(species) |> 
+  summarize(min_dummy=min(dummy_date))
+
 complete_daily <- readRDS("data/daily_completed")|>
   left_join(sy_current,by="species") |> 
   filter(spawn_year<today_spawn_year)|> 
@@ -272,11 +285,12 @@ complete_daily <- readRDS("data/daily_completed")|>
            TRUE ~ as.Date(day_of_year-1,origin="1976-01-01")
          )) |> 
   left_join(species_max_dates,by="species") |> 
-  group_by(species,spawn_year) |> 
-  mutate(min_date=min(dummy_date,na.rm=T)) |> 
-  complete(dummy_date=seq(min(min_date), max(max_date), by="day")) |> 
+  left_join(species_min_dates,by="species") |> 
+   group_by(species,spawn_year) |> 
+  # mutate(min_date=min(dummy_date,na.rm=T))# |> 
+  complete(dummy_date=seq(min(min_dummy), max(max_date), by="day")) |> 
   ungroup() |> 
-  select(-c(min_date,max_date)) |> 
+  select(-c(min_dummy,max_date)) |> 
   mutate(across(n,~replace_na(.x,0))) |> 
   mutate(across(daily_prop,~replace_na(.x,0)))|> 
   group_by(species,spawn_year) |> 
@@ -390,12 +404,28 @@ projected_pts <- projected_totals %>%
 
 
 alldaily <- complete_daily %>% 
-  select(spawn_year,yfk_entry_date,n,dummy_date,
-         daily_cumulative_n=daily_running_total) %>% 
-  bind_rows(complete_current)
+  select(spawn_year,yfk_entry_date,n,dummy_date) %>% 
+  bind_rows(complete_current) |> 
+  group_by(spawn_year,species) |> 
+  mutate(daily_cumulative_n=cumsum(n))
+
+# calculate projection stats
+
+run_stats <- alldaily |> 
+  left_join(sy_current,by="species") |> 
+  filter(spawn_year>2012,
+         spawn_year<today_spawn_year) |> 
+  group_by(spawn_year,species) |> 
+  mutate(total_n=sum(n),
+         prop_complete=daily_cumulative_n/total_n) |> 
+  group_by(dummy_date,species) |> 
+  summarize(median_percentcomplete=round(median(prop_complete)*100),
+            min_percentcomplete=round(min(prop_complete)*100),
+            max_percentcomplete=round(max(prop_complete)*100))
 
 # save additional parts to include in the shiny app
 
+saveRDS(run_stats,"data/run_stats")
 saveRDS(alldaily,"data/alldaily")
 saveRDS(projected_pts,"data/projections")
 
