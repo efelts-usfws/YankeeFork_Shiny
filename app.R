@@ -83,6 +83,12 @@ test_min <- alldaily.dat |>
   group_by(species,spawn_year) |> 
   summarize(earliest=min(yfk_entry_date,na.rm=T))
 
+spp_max <- run_stats |> 
+  filter(min_percentcomplete==100) |> 
+  ungroup() |> 
+  group_by(species) |> 
+  slice(which.min(dummy_date)) 
+
 today_dummy <- as.Date(yday(today())-1,
                        origin="1976-01-01")
 
@@ -286,7 +292,7 @@ server <- function(input,output,session){
   
   # make the date slider reactive to species selection
   
-  output$user_date_slider <- renderUI({
+  datelimit_reactive <- reactive({
     
     req(input$user_spp)
     
@@ -442,8 +448,8 @@ server <- function(input,output,session){
       geom_line(aes(text=str_c(" Date:",date,
                                "<br>","Mean Temp (C): ",mean_temp,
                                sep=" ")))+
-      scale_x_date(date_breaks = "1 week", date_labels="%b %d",
-                   limits=c(as.Date(plot_min),as.Date(plot_max)))+
+      # scale_x_date(date_breaks = "1 week", date_labels="%b %d",
+      #              limits=c(as.Date(plot_min),as.Date(plot_max)))+
       theme_bw()+
       theme(axis.text.x=element_text(angle=45,hjust=1))+
       labs(x="",y="Mean Temperature at Yankee Fork Gaging Station")
@@ -505,8 +511,8 @@ server <- function(input,output,session){
       theme_bw()+
       scale_color_manual(values=c("steelblue","gray70"))+
       theme(axis.text.x=element_text(angle=45,hjust=1))+
-      # scale_x_date(date_breaks = "1 week", date_labels="%b %d",
-      #               limits=c(min(input$user_dates),max(input)))+
+      scale_x_date(date_breaks="1 month", 
+                   date_labels="%b")+
       labs(x="Date to Yankee Fork Salmon River",
            y="# PIT Tags in Yankee Fork, Year-To-Date",
            color="")
