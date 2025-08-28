@@ -28,6 +28,8 @@ flow.dat <- readRDS("data/yfk_flow")
 
 daily.dat <- readRDS("data/daily")
 
+
+
 # location.dat <- readRDS("data/locations")
 
 individuals.dat <- readRDS("data/individuals")
@@ -83,14 +85,22 @@ test_min <- alldaily.dat |>
   group_by(species,spawn_year) |> 
   summarize(earliest=min(yfk_entry_date,na.rm=T))
 
+today_dummy <- as.Date(yday(today())-1,
+                       origin="1976-01-01")
+
+today_ref <- as.Date(format(Sys.Date(), "%Y-01-01"))-1
+
+
+
 spp_max <- run_stats |> 
   filter(min_percentcomplete==100) |> 
   ungroup() |> 
   group_by(species) |> 
-  slice(which.min(dummy_date)) 
+  slice(which.min(dummy_date)) |> 
+  mutate(current_max=as.Date(yday(dummy_date),
+                                  origin=today_ref))
 
-today_dummy <- as.Date(yday(today())-1,
-                       origin="1976-01-01")
+
 
 today_run <- run_stats |> 
   filter(dummy_date==today_dummy)
@@ -296,34 +306,22 @@ server <- function(input,output,session){
     
     req(input$user_spp)
     
-    dat <- run_stats |> 
+    dat <- spp_max |> 
       filter(species==input$user_spp)
-    
-    date_origin=ifelse(input$user_spp=="Steelhead",
-                       "1977-12-31","1976-12-31")
-    
-    slider_min <- as.Date(yday(min(dat$dummy_date)-months(1)),
-                          origin=date_origin)
-    
-    spp_max <- dat |> 
-      filter(min_percentcomplete==100) |> 
-      ungroup() |> 
-      slice(which.min(dummy_date)) |> 
-      pull(dummy_date)
-    
-    slider_max <- as.Date(yday(spp_max+months(1)),
-                          origin=date_origin)
-    
-    
-    sliderInput(inputId = "user_dates",
-                label="Choose a Date Range",
-                min=slider_min,
-                max=slider_max,
-                value=c(slider_min,slider_max),
-                timeFormat = "%b %d")
     
   })
   
+  # make current spawn year reactive to species selection
+  
+  sy_reactive <- reactive({
+    
+    req(input$user_spp)
+    
+    dat <- sy_current |> 
+      filter(species==input$user_spp)
+    
+    
+  })
   
   # number of individuals needs to be reactive to 
   # species selection
@@ -407,17 +405,14 @@ server <- function(input,output,session){
   
   flowplot_reactive <- reactive({
     
-    plot_min <- min(input$user_dates)
-    plot_max <- max(input$user_dates)
-    
+
     flow.plot <- flow.dat %>% 
       mutate(date=as_date(date)) %>% 
       ggplot(aes(x=date,y=mean_discharge,group=group))+
       geom_line(aes(text=str_c(" Date:",date,
                                "<br>","Mean Discharge (cfs): ",mean_discharge,
                                sep=" ")))+
-      scale_x_date(date_breaks = "1 week", date_labels="%b %d",
-                   limits=c(as.Date(plot_min),as.Date(plot_max)))+
+      scale_x_date(date_breaks = "1 month", date_labels="%b")+
       theme_bw()+
       theme(axis.text.x=element_text(angle=45,hjust=1))+
       labs(x="",y="Mean Discharge at Yankee Fork Gaging Station")
@@ -473,8 +468,13 @@ server <- function(input,output,session){
     
     req(input$user_spp)
     
+    sy.dat <- sy_reactive()
+    
     alldaily.dat |> 
-      filter(species==input$user_spp)
+      filter(species==input$user_spp) |> 
+      filter(spawn_year<sy.dat$today_spawn_year|
+               (spawn_year==sy.dat$today_spawn_year&
+                  dummy_jday<=sy.dat$today.jday))
     
   })
   
@@ -487,7 +487,7 @@ server <- function(input,output,session){
   compplot_reactive <- reactive({
     
     req(input$user_spp)
-    req(input$user_dates)
+    
     
     # plot_lim.dat <- tibble(min_doy=yday(min(input$user_dates)),
     #                        max_doy=yday(max(input$user_dates))) |> 
@@ -499,6 +499,9 @@ server <- function(input,output,session){
     #                          as.Date(max_doy,origin="1976-12-31")))
     # 
     dat <- alldaily_reactive()
+    
+    xlimit <- datelimit_reactive() 
+
     
     comp_plot <-dat %>% 
       ggplot(aes(x=dummy_date,y=daily_cumulative_n,
@@ -512,7 +515,9 @@ server <- function(input,output,session){
       scale_color_manual(values=c("steelblue","gray70"))+
       theme(axis.text.x=element_text(angle=45,hjust=1))+
       scale_x_date(date_breaks="1 month", 
-                   date_labels="%b")+
+                   date_labels="%b",
+                   limits=c(min(dat$dummy_date,na.rm=T),
+                            xlimit$dummy_date))+
       labs(x="Date to Yankee Fork Salmon River",
            y="# PIT Tags in Yankee Fork, Year-To-Date",
            color="")
