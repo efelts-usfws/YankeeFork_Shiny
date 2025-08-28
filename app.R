@@ -272,20 +272,20 @@ ui <- page_navbar(
                 
                 card(card_header("Year-to-date Totals"),
                      plotlyOutput("comp_plot"),
-                     full_screen = T)
-                # 
-                # card(card_header("Unique Fish In"),
-                #      plotlyOutput("entry_plot"),
-                #      full_screen = T),
-                # 
-                # card(card_header("Length Frequency"),
-                #      plotlyOutput("lf_plot"),
-                #      full_screen = TRUE),
-                # 
-                # card(card_header("Marking Locations"),
-                #      DTOutput("marklocation_summary"),
-                #      full_screen = TRUE)
-                # 
+                     full_screen = T),
+
+                card(card_header("Unique Fish In"),
+                     plotlyOutput("entry_plot"),
+                     full_screen = T),
+
+                card(card_header("Length Frequency"),
+                     plotlyOutput("lf_plot"),
+                     full_screen = TRUE),
+
+                card(card_header("Marking Locations"),
+                     DTOutput("marklocation_summary"),
+                     full_screen = TRUE)
+
                 
               )
               
@@ -478,6 +478,20 @@ server <- function(input,output,session){
     
   })
   
+  # make daily unique fish for current year filter by
+  # user selected species
+  
+  daily_reactive <- reactive({
+    
+    req(input$user_spp)
+    
+    dat <- daily.dat |> 
+      filter(species==input$user_spp)
+    
+    
+  })
+  
+  
   # make a reactive plot of cumulative
   # numbers in; this is named comp plot bc
   # eventually it will compare the cumulative
@@ -539,21 +553,19 @@ server <- function(input,output,session){
   
   dailyentry_reactive <- reactive({
     
-    plot_min <- min(input$user_dates)
-    plot_max <- max(input$user_dates)
+    dat <- daily_reactive()
     
     entry.plot <- ggplot()+
-      geom_col(data=daily.dat,fill="dodgerblue",color="black",
-               aes(x=yfk_entry_date,y=n,group=spawn_year,
+      geom_col(data=dat,fill="dodgerblue",color="black",
+               aes(x=yfk_entry_date,y=n,
                    text=str_c(" Date:",yfk_entry_date,
-                              "<br>","Number Steelhead Entered:",n,
+                              "<br>","Number Fish Entered:",n,
                               sep=" ")))+
-      scale_x_date(date_breaks = "1 week", date_labels="%b %d",
-                   limits=c(as.Date(plot_min),as.Date(plot_max)))+
+      scale_x_date(date_breaks = "1 week", date_labels="%b %d")+
       theme_bw()+
       theme(axis.text.x=element_text(angle=45,hjust=1))+
       labs(x="Date at Yankee Fork PIT Array",
-           y="Number of unique PIT-Tagged Steelhead")
+           y="Number of unique PIT-Tagged Fish")
     
   })
   
@@ -571,30 +583,43 @@ server <- function(input,output,session){
   # make the plotly graph of a length frequency for all the
   # fish to come through this spawn year
   
+  # filter length data by user selected species in
+  # a reactive
+  
+  lf_reactive <- reactive({
+    
+    req(input$user_spp)
+    
+    dat <- lf.dat |> 
+      filter(species==input$user_spp)
+  })
+  
   output$lf_plot <- renderPlotly({
     
-    plot.lf <- lf.dat %>%   
+    dat <- lf_reactive()
+    
+    plot.lf <- dat %>%   
       ggplot(aes(x=length_bin,y=freq))+
       geom_col(aes(text=str_c("Length Bin: ",length_bin,
                               "<br>",
                               "Number: ",freq)),
                fill="steelblue",color="black")+
-      geom_vline(data=lf.dat,aes(xintercept = first(mean_length)),
+      geom_vline(data=dat,aes(xintercept = first(mean_length)),
                  linetype="dashed",color="black")+
-      geom_text(x=min(lf.dat$length_bin, na.rm=T)*1.05,
-                y=max(lf.dat$freq, na.rm=T) * 0.88,
+      geom_text(x=min(dat$length_bin, na.rm=T)*1.05,
+                y=max(dat$freq, na.rm=T) * 0.88,
                 label=str_c("N = ",first(lf.dat$total_sample)),
                 size=4,hjust=0)+
-      geom_text(x=min(lf.dat$length_bin, na.rm=T)*1.05,
-                y=max(lf.dat$freq, na.rm=T) * 0.95,
+      geom_text(x=min(dat$length_bin, na.rm=T)*1.05,
+                y=max(dat$freq, na.rm=T) * 0.95,
                 label=str_c("Mean Length = ",
-                            str_c(round(first(lf.dat$mean_length)),"mm",sep=" ")),
+                            str_c(round(first(dat$mean_length)),"mm",sep=" ")),
                 size=4,hjust=0)+
-      scale_x_continuous(breaks=seq(min(lf.dat$length_bin),
-                                    max(lf.dat$length_bin),25))+
+      scale_x_continuous(breaks=seq(min(dat$length_bin),
+                                    max(dat$length_bin),25))+
       scale_y_continuous(breaks=scales::breaks_pretty(n=10))+
       theme_bw()+
-      labs(x="Length bin (25 mm)",y="Number of Steelhead")
+      labs(x="Length bin (25 mm)",y="Number of Fish")
     
     ggplotly(plot.lf,
              tooltip=c("text"))
@@ -611,10 +636,23 @@ server <- function(input,output,session){
   
   # render a data table of marking summaries
   
+  # make the mark summary table reactive
+  # to user selected species
+  
+  marksummary_reactive <- reactive({
+    
+    req(input$user_spp)
+    
+    dat <- mark.summary |> 
+      filter(species==input$user_spp)
+    
+  })
+  
   output$marklocation_summary <- renderDT({
     
+    dat <- marksummary_reactive()
     
-    mark.summary
+    dat
     
   })
   
