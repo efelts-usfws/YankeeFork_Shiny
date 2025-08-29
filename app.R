@@ -34,7 +34,7 @@ individuals.dat <- readRDS("data/individuals")
 
 individuals.export <- individuals.dat |> 
   select(pit_id,species,release_lifestage,release_sitecode,
-         release_datetime,length_mm,yfk_entry=yfk_entry_final) |> 
+         release_datetime,length_mm,yfk_entry=yfk_first) |> 
   mutate(observation_year=year(yfk_entry),
          spawn_year=case_when(
            yday(yfk_entry)>=183 & species=="Steelhead" ~ observation_year+1,
@@ -657,6 +657,18 @@ server <- function(input,output,session){
   
   # make a download output of individual data
   
+  # make it react to user species filter
+  
+  individuals.export_reactive <- reactive({
+    
+    req(input$user_spp)
+    
+    individuals.export |> 
+      filter(species==input$user_spp)
+    
+    
+  })
+  
   output$download_ind <- downloadHandler(
     
     
@@ -668,7 +680,7 @@ server <- function(input,output,session){
     
     content=function(file){
       
-      write.csv(individuals.export,file,row.names=F)
+      write.csv(individuals.export_reactive(),file,row.names=F)
       
     }
     
