@@ -18,7 +18,7 @@ library(dataRetrieval)
 # I'll drop out here as well
 
 
-dat <- read_csv("data/YFK STHD_Comparisons.csv") |>  
+dat <- read_csv("data/YFK All_Comparisons.csv") |>  
   mutate(observation_sitecode=word(`Site Name`,1,sep=" "),
          release_sitecode=word(`Release Site Name`,1,sep=" "),
          observation_datetime=as.POSIXct(`Obs Time Value`,
@@ -26,12 +26,15 @@ dat <- read_csv("data/YFK STHD_Comparisons.csv") |>
                                          tz = "America/Los_Angeles"),
          observation_month=month(observation_datetime),
          observation_year=year(observation_datetime),
-         spawn_year=ifelse(observation_month>6,(observation_year+1),
-                           observation_year),
+         spawn_year=case_when(
+           yday(observation_datetime)>=183 & `Species Name`=="Steelhead" ~ observation_year+1,
+           TRUE ~ observation_year
+         ),
          release_datetime=mdy(`Release Date MMDDYYYY`),
          release_year=year(release_datetime),
          yrs_at_large=observation_year-release_year) |> 
-  select(pit_id=`Tag Code`,rear_type=`Rear Type Code`,
+  select(pit_id=`Tag Code`,species=`Species Name`,
+         rear_type=`Rear Type Code`,
          run_type=`Run Name`,
          release_sitecode,release_lifestage=`Mark Life Stage Value`,
          release_datetime,release_year,
@@ -41,30 +44,44 @@ dat <- read_csv("data/YFK STHD_Comparisons.csv") |>
          spawn_year,
          length_mm=`Mark Length mm`) |> 
 
-# some have NA for life stage; for those if length > 300 mm
+# some steelhead have NA for life stage; for those if length > 300 mm
   # go ahead and treat as adult marked, otherwise Juvenile which
   # means they'll be searched in a later query for downstream
   # detections, and if not found in that they'll be dropped
   # from the run timing analysis
   
-  mutate(most_recent=max(spawn_year,na.rm=T),
-         release_lifestage=case_when(
+  mutate(release_lifestage=case_when(
            
-           is.na(release_lifestage) & is.na(length_mm) ~ "Juvenile",
-           is.na(release_lifestage) & length_mm <= 300 ~ "Juvenile",
-           is.na(release_lifestage) & length_mm > 300 ~ "Adult",
+           is.na(release_lifestage) & length_mm <= 300 &
+             species %in% c("Steelhead","Chinook") ~ "Juvenile",
+           is.na(release_lifestage) & length_mm > 300 &
+             species %in% c("Steelhead","Chinook") ~ "Adult",
+           release_lifestage=="Adult" & length_mm<=300&
+             species %in% c("Steelhead","Chinook") ~ "Juvenile",
+           is.na(release_lifestage) & is.na(length_mm)&
+             species %in% c("Chinook","Steelhead")& release_sitecode %in% c("COLR3","LGRLDR")
+           ~ "Adult",
+           is.na(release_lifestage) & is.na(length_mm)&
+             species %in% c("Chinook","Steelhead")& !release_sitecode %in% c("COLR3","LGRLDR")
+           ~ "Juvenile",
+           is.na(release_lifestage) & species %in% c("Bull Trout") &
+             length_mm >= 300 ~ "Adult",
+           is.na(release_lifestage) & species %in% c("Bull Trout") &
+             length_mm < 300 ~ "Juvenile",
            TRUE ~ release_lifestage
            
          )) |> 
-  filter(!spawn_year==most_recent,
-         !run_type=="Resident") |> 
-  filter(yrs_at_large!=0 | release_lifestage != "Juvenile")
+  filter(!(yrs_at_large==0 & release_lifestage=="Juvenile"))
 
+  
+ 
+  
 # bring in detection data from downstream, basically
 # all the Snake and Columbia dam infrastructure and find the last
-# detection they had down there
+# detection they had down there; this is split into 2 bc it
+# was exceeding the PTAGIS row limit
 
-yfk_downstream.filter <- read_csv("data/YFK Steelhead Downstream Comparisons.csv") |> 
+yfk_downstream.filter1 <- read_csv("data/YFK All Downstream Comparisons_15-25.csv") |> 
   mutate(ds_datetime=as.POSIXct(`Obs Time Value`,
                              format = "%m/%d/%Y %I:%M:%S %p", 
                              tz = "America/Los_Angeles"),
@@ -75,7 +92,21 @@ yfk_downstream.filter <- read_csv("data/YFK Steelhead Downstream Comparisons.csv
   slice(which.max(ds_datetime))
 
 
-  
+
+yfk_downstream.filter2 <- read_csv("data/YFK All Downstream_06-14.csv") |> 
+  mutate(ds_datetime=as.POSIXct(`Obs Time Value`,
+                                format = "%m/%d/%Y %I:%M:%S %p", 
+                                tz = "America/Los_Angeles"),
+         ds_site=word(`Site Name`,1,sep=" ")) |> 
+  select(pit_id=`Tag Code`,
+         ds_datetime,ds_site) |> 
+  group_by(pit_id) |> 
+  slice(which.max(ds_datetime))
+
+yfk_downstream.filter <- bind_rows(yfk_downstream.filter1,
+                                   yfk_downstream.filter2)
+
+
 # pull out detection at YFK that were marked as juveniles
 #  at YFK, SAWT, PAHSIW, YANKWF, or SALR4, join to downstream
 # detections and drop any that don't 
@@ -94,16 +125,16 @@ yfk_juvenile.filter <- dat |>
          release_sitecode %in% c("YANKFK","SAWT",
                                  "PAHSIW","YANKWF",
                                  "SALR4")) |> 
-  left_join(yfk_downstream.filter,by="pit_id") |> 
-  filter(!is.na(ds_datetime)) |> 
   group_by(pit_id) |> 
+  slice(which.max(observation_datetime)) |> 
+  inner_join(yfk_downstream.filter,by="pit_id") |> 
   filter(observation_datetime>ds_datetime) |> 
   ungroup() |> 
   select(-c(ds_datetime,ds_site))
 
 # because of the way that i set up downstream
 # detection query, this will not find the downstream
-# history of those marked anywhere except YANKWF; to do
+# history of those marked anywhere except YANKF; to do
 # so would require separate queries because there's a 
 # lot of fish released from these various sites; there
 # was a small enough number of according records that i 
@@ -139,6 +170,12 @@ dat.mark <- summary.dat |>
   summarize(release_sitecode=first(release_sitecode),
             release_datetime=first(release_datetime))
 
+# some of the bull trout didn't have a release date or loactation but 
+# were definitely YFK and the release date would be same as mark
+# date so making that correction here
+
+
+
 yfk_logical <- c("YFK","YANKFK")
 
 yfkentry_logical <- c("YFK")
@@ -152,148 +189,80 @@ yfkentry_logical <- c("YFK")
 # should be a pretty conservative filter 
 
 yfkindividuals_completedyrs <- summary.dat |> 
-  group_by(pit_id,spawn_year) |>
+  group_by(pit_id,species,spawn_year) |>
   summarize(yfk_first=first(observation_datetime),
             yfk_entry_final=last(observation_datetime),
             yfk_diff=as.numeric(yfk_entry_final-yfk_first,units="days"),
             length_mm=mean(length_mm,na.rm=T),
             release_lifestage=first(release_lifestage)) |> 
-  left_join(dat.mark,by="pit_id") |> 
-  mutate(species="Steelhead")
+  left_join(dat.mark,by="pit_id") 
 
+# some of the bull trout didn't have a release date or loactation but 
+# were definitely YFK and the release date would be same as mark
+# date so making that correction here
+
+blt.append <- yfkindividuals_completedyrs |> 
+  filter(is.na(release_datetime),
+         species=="Bull Trout")
+
+blt_correction <-  read_csv("data/YFK All_Comparisons.csv") |>
+  mutate(release_sitecode=word(`Release Site Name`,1,sep=" "),
+         observation_datetime=as.POSIXct(`Obs Time Value`,
+                                         format = "%m/%d/%Y %I:%M:%S %p", 
+                                         tz = "America/Los_Angeles"),
+         mark_date=mdy(`Mark Date MMDDYYYY`),
+         species=`Species Name`,
+         pit_id=`Tag Code`) |> 
+  filter(pit_id %in% blt.append$pit_id) |> 
+  group_by(pit_id) |> 
+  summarize(release_datetime_correction=first(mark_date)) |> 
+  mutate(release_sitecode_correction="YANKFK")
+
+yfkindividuals_completedyrs <- yfkindividuals_completedyrs |> 
+  left_join(blt_correction,by="pit_id") |> 
+  mutate(release_datetime=case_when(
+    is.na(release_datetime) ~ release_datetime_correction,
+    TRUE ~ release_datetime
+  ),
+  release_sitecode=case_when(
+    release_sitecode=="-" ~ release_sitecode_correction,
+    TRUE ~ release_sitecode
+  )) |> 
+  select(-c(release_sitecode_correction,
+            release_datetime_correction)) |> 
+  filter(species %in% c("Steelhead","Chinook",
+                        "Bull Trout"))
 
 
 
 # now summarize by day so we can reference how much of 
 # the run should be complete on a given day
 
+# think about when running this which spawn years to 
+# drop...i.e. those that are in progress, by species
+# that will need to be updated in the final filter here
+# depending on when this is being run
+
 yfk_entry_daily <- yfkindividuals_completedyrs |> 
   mutate(yfk_entry_date=as_date(yfk_first)) |> 
-  group_by(spawn_year) |> 
+  group_by(spawn_year,species) |> 
   mutate(sy_total=n()) |> 
   ungroup() |> 
-  group_by(yfk_entry_date) |> 
+  group_by(species,yfk_entry_date) |> 
   summarize(spawn_year=first(spawn_year),
             n=n(),
             sy_total=first(sy_total)) |>
-  group_by(spawn_year) |> 
+  group_by(spawn_year,species) |> 
   mutate(daily_running_total=cumsum(n),
          daily_prop=n/sy_total,
          daily_cumulative=daily_running_total/sy_total) |> 
-  mutate(species="Steelhead")
+  filter(!(species %in% c("Bull Trout","Chinook")&
+             spawn_year==2025))
 
 # that's the data frame that will get used in constructing
 # descriptions of where current year is relative to the
 # previous runs
 
+
 saveRDS(yfk_entry_daily,
         "data/daily_completed")
-
-
-# add in Chinook
-
-chn.dat <- read_csv("data/YFK CHN_Comparisons.csv") |>  
-  mutate(observation_sitecode=word(`Site Name`,1,sep=" "),
-         release_sitecode=word(`Release Site Name`,1,sep=" "),
-         observation_datetime=as.POSIXct(`Obs Time Value`,
-                                         format = "%m/%d/%Y %I:%M:%S %p", 
-                                         tz = "America/Los_Angeles"),
-         observation_month=month(observation_datetime),
-         observation_year=year(observation_datetime),
-         spawn_year=observation_year,
-         release_datetime=mdy(`Release Date MMDDYYYY`),
-         release_year=year(release_datetime),
-         yrs_at_large=observation_year-release_year) |> 
-  select(pit_id=`Tag Code`,rear_type=`Rear Type Code`,
-         run_type=`Run Name`,
-         release_sitecode,release_lifestage=`Mark Life Stage Value`,
-         release_datetime,release_year,
-         observation_sitecode,
-         observation_datetime,observation_month,
-         observation_year,yrs_at_large,
-         spawn_year,
-         length_mm=`Mark Length mm`) |> 
-  mutate(most_recent=max(spawn_year,na.rm=T),
-         release_lifestage=case_when(
-           
-           is.na(release_lifestage) & is.na(length_mm) ~ "Juvenile",
-           is.na(release_lifestage) & length_mm <= 300 ~ "Juvenile",
-           is.na(release_lifestage) & length_mm > 300 ~ "Adult",
-           TRUE ~ release_lifestage
-           
-         )) |> 
-  filter(!(yrs_at_large==0 & release_lifestage=="Juvenile"),
-         !(yrs_at_large==1 & release_sitecode%in% c("YANKFK","YANKWF")))
-
-
-chn_yfk_downstream.filter <- read_csv("data/YFK Chinook Downstream Comparisons.csv") |> 
-  mutate(ds_datetime=as.POSIXct(`Obs Time Value`,
-                                format = "%m/%d/%Y %I:%M:%S %p", 
-                                tz = "America/Los_Angeles"),
-         ds_site=word(`Site Name`,1,sep=" ")) |> 
-  select(pit_id=`Tag Code`,
-         ds_datetime,ds_site) |> 
-  group_by(pit_id) |> 
-  slice(which.max(ds_datetime))
-
-chn_yfk_juvenile.filter <- chn.dat |> 
-  filter(release_lifestage=="Juvenile") |> 
-  left_join(chn_yfk_downstream.filter,by="pit_id") |> 
-  filter(!is.na(ds_datetime)) |> 
-  group_by(pit_id) |> 
-  filter(observation_datetime>ds_datetime) |> 
-  ungroup() |> 
-  select(-c(ds_datetime,ds_site))
-
-chn_summary.dat <- chn.dat |> 
-  filter(release_lifestage=="Adult"|
-           (release_lifestage=="Juvenile"&
-              !release_sitecode %in% c("YANKFK","YANKWF"))) |> 
-  bind_rows(chn_yfk_juvenile.filter)
-
-chn_dat.mark <- chn_summary.dat |> 
-  group_by(pit_id) |> 
-  summarize(release_sitecode=first(release_sitecode),
-            release_datetime=first(release_datetime))
-  
-
-chn_yfkindividuals_completedyrs <- chn_summary.dat |> 
-  group_by(pit_id,spawn_year) |>
-  summarize(yfk_first=first(observation_datetime),
-            yfk_entry_final=last(observation_datetime),
-            yfk_diff=as.numeric(yfk_entry_final-yfk_first,units="days"),
-            length_mm=mean(length_mm,na.rm=T),
-            release_lifestage=first(release_lifestage)) |> 
-  left_join(chn_dat.mark,by="pit_id") |> 
-  mutate(species="Chinook")
-
-# individuals completed will be used in Shiny, 
-# so want species and then bind and save 
-# as an RDS
-
-# that's the data frame that will be used to plot so save here
-
-saveRDS(chn_yfkindividuals_completedyrs,
-        "data/individuals_completed_chn")
-
-# now summarize by day to be able to make
-# projections
-
-chn_yfk_entry_daily <- chn_yfkindividuals_completedyrs |> 
-  mutate(yfk_entry_date=as_date(yfk_first)) |> 
-  group_by(spawn_year) |> 
-  mutate(sy_total=n()) |> 
-  ungroup() |> 
-  group_by(yfk_entry_date) |> 
-  summarize(spawn_year=first(spawn_year),
-            n=n(),
-            sy_total=first(sy_total)) |>
-  group_by(spawn_year) |> 
-  mutate(daily_running_total=cumsum(n),
-         daily_prop=n/sy_total,
-         daily_cumulative=daily_running_total/sy_total) |> 
-  mutate(species="Chinook")
-
-
-saveRDS(chn_yfk_entry_daily,
-        "data/daily_completed_chn")
