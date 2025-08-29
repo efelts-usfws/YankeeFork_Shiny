@@ -81,7 +81,7 @@ yfk_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efe
   )) |> 
   group_by(species) |> 
   mutate(most_recent=max(spawn_year,na.rm=T)) |> 
-  filter(spawn_year==most_recent)
+  filter(spawn_year==year(today()))
 
 
   # where were juveniles marked?
@@ -259,7 +259,7 @@ sy_current <- tibble(species=c("Steelhead","Chinook",
 species_max_dates <- tibble(
   species=c("Bull Trout","Chinook","Steelhead"),
   max_date=as.Date(c("1976-12-31","1976-12-31",
-                     "1977-06-30"))
+                     "1976-12-31"))
 )
 
 # need to set minimum dates also so that each observed year 
@@ -269,7 +269,7 @@ species_max_dates <- tibble(
 species_min_dates <- readRDS("data/daily_completed") |> 
   mutate(day_of_year=yday(yfk_entry_date),
          dummy_date=case_when(
-           species=="Steelhead"&day_of_year<183 ~ as.Date(day_of_year,origin="1977-01-01"),
+           species=="Steelhead"&day_of_year<183 ~ as.Date(day_of_year,origin="1976-01-01"),
            TRUE ~ as.Date(day_of_year-1,origin="1976-01-01")
          )) |> 
   group_by(species) |> 
@@ -281,7 +281,7 @@ complete_daily <- readRDS("data/daily_completed")|>
   ungroup() |> 
   mutate(day_of_year=yday(yfk_entry_date),
          dummy_date=case_when(
-           species=="Steelhead"&day_of_year<183 ~ as.Date(day_of_year,origin="1977-01-01"),
+           species=="Steelhead"&day_of_year<183 ~ as.Date(day_of_year,origin="1976-01-01"),
            TRUE ~ as.Date(day_of_year-1,origin="1976-01-01")
          )) |> 
   left_join(species_max_dates,by="species") |> 
@@ -339,7 +339,7 @@ complete_current <- yfk_entry.summary %>%
                         "Steelhead")) |> 
   mutate(day_of_year=yday(yfk_entry_date),
          dummy_date=case_when(
-           species=="Steelhead"&day_of_year<183 ~ as.Date(day_of_year,origin="1977-01-01"),
+           species=="Steelhead"&day_of_year<183 ~ as.Date(day_of_year,origin="1976-01-01"),
            TRUE ~ as.Date(day_of_year-1,origin="1976-01-01")
          )) |> 
   left_join(species_max_dates,by="species") |> 
