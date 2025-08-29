@@ -28,8 +28,6 @@ flow.dat <- readRDS("data/yfk_flow")
 
 daily.dat <- readRDS("data/daily")
 
-
-
 # location.dat <- readRDS("data/locations")
 
 individuals.dat <- readRDS("data/individuals")
@@ -64,7 +62,7 @@ sy_current <- tibble(species=c("Steelhead","Chinook",
   mutate(today.year=year(today()),
          today.jday=yday(today()),
          today_spawn_year=case_when(
-           species == "Steelhead"& today.jday>=183 ~ today.year+1,
+           species == "Steelhead"& today.jday>=183 ~ today.year,
            TRUE ~ today.year))
 
 alldaily.dat <- readRDS("data/alldaily") |> 
@@ -206,8 +204,7 @@ ui <- page_navbar(
                       selectInput(inputId = "user_spp",
                                   label = "Choose a Species",
                                   choices = c("Steelhead",
-                                              "Chinook",
-                                              "Bull Trout"),
+                                              "Chinook"),
                                   selected = today_spp,
                                   selectize = FALSE
                                   ),
@@ -606,20 +603,22 @@ server <- function(input,output,session){
                fill="steelblue",color="black")+
       geom_vline(data=dat,aes(xintercept = first(mean_length)),
                  linetype="dashed",color="black")+
-      geom_text(x=min(dat$length_bin, na.rm=T)*1.05,
-                y=max(dat$freq, na.rm=T) * 0.88,
-                label=str_c("N = ",first(lf.dat$total_sample)),
-                size=4,hjust=0)+
-      geom_text(x=min(dat$length_bin, na.rm=T)*1.05,
-                y=max(dat$freq, na.rm=T) * 0.95,
-                label=str_c("Mean Length = ",
-                            str_c(round(first(dat$mean_length)),"mm",sep=" ")),
-                size=4,hjust=0)+
+      # geom_text(x=min(dat$length_bin, na.rm=T)*1.05,
+      #           y=max(dat$freq, na.rm=T) * 0.88,
+      #           label=str_c("N = ",first(lf.dat$total_sample)),
+      #           size=4,hjust=0)+
+      # geom_text(x=min(dat$length_bin, na.rm=T)*1.05,
+      #           y=max(dat$freq, na.rm=T) * 0.95,
+      #           label=str_c("Mean Length = ",
+      #                       str_c(round(first(dat$mean_length)),"mm",sep=" ")),
+      #           size=4,hjust=0)+
       scale_x_continuous(breaks=seq(min(dat$length_bin),
                                     max(dat$length_bin),25))+
       scale_y_continuous(breaks=scales::breaks_pretty(n=10))+
       theme_bw()+
-      labs(x="Length bin (25 mm)",y="Number of Fish")
+      labs(x="Length bin (25 mm)",
+           y=str_c("Number of Fish","N =",first(lf.dat$total_sample),
+                   sep=" "))
     
     ggplotly(plot.lf,
              tooltip=c("text"))
