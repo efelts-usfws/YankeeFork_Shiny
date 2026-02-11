@@ -552,7 +552,8 @@ server <- function(input,output,session){
     dat <- daily_reactive()
     
     
-    req(any(dat$sy_total > 0, na.rm = TRUE))
+    req(nrow(dat)>0,
+        any(dat$sy_total > 0, na.rm = TRUE))
     
     
     entry.plot <- ggplot()+
@@ -597,6 +598,11 @@ server <- function(input,output,session){
   output$lf_plot <- renderPlotly({
     
     dat <- lf_reactive()
+    
+    
+    req(nrow(dat)>0,
+        any(dat$freq > 0, na.rm = TRUE))
+    
     
     plot.lf <- dat %>%   
       ggplot(aes(x=length_bin,y=freq))+
