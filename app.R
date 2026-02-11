@@ -150,7 +150,7 @@ lf.dat <- individuals.dat %>%
             mean_length=first(mean_length))
 
 
-slider_min <- as.Date(min(individuals.dat$yfk_entry_final))
+# slider_min <- as.Date(min(individuals.dat$yfk_entry_final))
 
 lastweek_detections <- individuals.dat %>% 
   filter(yfk_entry_final>=today()-days(7))
@@ -209,8 +209,7 @@ ui <- page_navbar(
                                   selectize = FALSE
                                   ),
                       
-                      uiOutput("user_date_slider"),
-                      
+              
                       downloadBttn("download_ind",
                                    "Download Current Year Individual Summaries")
                       
@@ -263,8 +262,8 @@ ui <- page_navbar(
                      plotlyOutput("flow_plot"),
                      full_screen = T),
                 
-                card(card_header("Stream Temperature"),
-                     plotlyOutput("temp_plot"),
+                card(card_header("Salmon River PIT Detections"),
+                     plotlyOutput("salmoncomp_plot"),
                      full_screen = T),
                 
                 card(card_header("Year-to-date Totals"),
@@ -549,8 +548,12 @@ server <- function(input,output,session){
   # make the plot for daily numbers of pit tags entering
   
   dailyentry_reactive <- reactive({
-    
+
     dat <- daily_reactive()
+    
+    
+    req(any(dat$sy_total > 0, na.rm = TRUE))
+    
     
     entry.plot <- ggplot()+
       geom_col(data=dat,fill="dodgerblue",color="black",

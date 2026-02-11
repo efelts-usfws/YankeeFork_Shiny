@@ -84,7 +84,7 @@ yfk_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efe
   filter(spawn_year==year(today()))
 
 
-  # where were juveniles marked?
+# where were juveniles marked?
   
   juv_mark.sum <- yfk_detections.dat |> 
     group_by(species,release_sitecode,
@@ -164,6 +164,8 @@ yfk_individuals.summary <- yfk_detections.dat |>
             release_lifestage=first(release_lifestage)) |>  
   left_join(dat.mark,by="pit_id") 
 
+if(nrow(yfk_individuals.summary)>0){
+  
 
 yfk_entry.summary <- yfk_individuals.summary |>  
   mutate(yfk_entry_date=as_date(yfk_first))  |>  
@@ -174,6 +176,16 @@ yfk_entry.summary <- yfk_individuals.summary |>
          cumulative_total=cumsum(n),
          daily_prop=n/sy_total,
          daily_cumulative=cumsum(daily_prop)) 
+}else{
+yfk_entry.summary <-  tibble(yfk_entry_date=as_date(today()),
+                             species=c("Bull Trout","Chinook","Steelhead"),
+                             n=0,
+                             sy_total=0,
+                             cumulative_total=0,
+                             daily_prop=0,
+                             daily_cumulative=0) 
+
+}
 
 # get numbers by location as well
 
@@ -211,7 +223,7 @@ yfk.daily <- readNWISdv(siteNumber=yfk.site,
   mutate(date=as_date(date))
 
 yfk.dat <-yfk.daily |> 
-  filter(date>=as_date("2025-01-01"),
+  filter(date>=as_date("2026-01-01"),
          date<=today()) |>  
   mutate(group=1)
 
