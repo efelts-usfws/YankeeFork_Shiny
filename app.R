@@ -158,6 +158,10 @@ lastweek_detections <- individuals.dat %>%
 lastweek_new <- individuals.dat %>% 
   filter(yfk_first>=today()-days(7))
 
+# read in USE array data 
+
+use_daily <- readRDS("data/use_complete_current")
+
 # find two weeks prior to the first PIT tag
 # detection for the year, so that can
 # be the start for the date filter
@@ -542,6 +546,44 @@ server <- function(input,output,session){
     
     ggplotly(plot1,
              tooltip=c("text")) 
+    
+  })
+  
+  # make a reactive to filter species for USE detections
+  
+  usedaily_reactive <- reactive({
+   
+    req(input$user_spp)
+    
+    dat <- use_daily |> 
+      filter(species==input$user_spp)
+    
+    
+    plot1 <-dat %>% 
+      ggplot(aes(x=dummy_date,y=daily_cumulative,
+                 group=species))+
+      geom_line(aes(text=str_c(" Date:",format(dummy_date, "%b %d"),
+                               "<br>",
+                               "YTD Number Detected:",round(daily_cumulative),sep=" ")))+
+      theme_bw()+
+      theme(axis.text.x=element_text(angle=45,hjust=1))+
+      scale_x_date(date_breaks="1 month", 
+                   date_labels="%b")+
+      labs(x="Date to Salmon River",
+           y="# PIT Tags Salmon River Array, Year-To-Date")
+    
+    ggplotly(plot1,tooltip = "text")
+    
+  })
+  
+  # make the plot for USE accumulation
+  
+  output$salmoncomp_plot <- renderPlotly({
+    
+    dat <- usedaily_reactive()
+    
+    
+    
     
   })
   

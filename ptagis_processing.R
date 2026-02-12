@@ -501,7 +501,7 @@ others_downstream_detections.dat <-  vroom(file = "https://api.ptagis.org/report
 # bind with the already run YANKFK query
 
 bind_downstream_detections.dat <-   bind_rows(others_downstream_detections.dat,
-                                              yfk_downstream_detections.dat)
+                                              downstream_detections.dat)
 
 # pull out detections at USE that were marked as
 # juveniles and drop
