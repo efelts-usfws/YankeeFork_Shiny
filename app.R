@@ -26,6 +26,18 @@ conflicts_prefer(DT::renderDT,
 
 flow.dat <- readRDS("data/yfk_flow")
 
+ice_runs <- flow.dat |> 
+  filter(qualifier=="ICE",
+         year==2026)|> 
+  mutate(gap=as.integer(date - lag(date, default = first(date))) > 1,
+         run_id = cumsum(gap)
+  ) |> 
+  group_by(run_id) |> 
+  summarise(start = min(date), end = max(date), .groups = "drop") |> 
+  mutate(start_dummy=as.Date(yday(start)-1, origin="1976-01-01"),
+         end_dummy=as.Date(yday(end)-1, origin="1976-01-01"))
+
+
 daily.dat <- readRDS("data/daily")
 
 # location.dat <- readRDS("data/locations")
@@ -405,17 +417,36 @@ server <- function(input,output,session){
   
   flowplot_reactive <- reactive({
     
-
-    flow.plot <- flow.dat %>% 
-      mutate(date=as_date(date)) %>% 
-      ggplot(aes(x=date,y=mean_discharge,group=group))+
-      geom_line(aes(text=str_c(" Date:",date,
+# 
+#     flow.plot <- flow.dat %>% 
+#       mutate(date=as_date(date)) %>% 
+#       ggplot(aes(x=date,y=mean_discharge,group=group))+
+#       geom_line(aes(text=str_c(" Date:",date,
+#                                "<br>","Mean Discharge (cfs): ",mean_discharge,
+#                                sep=" ")))+
+#       scale_x_date(date_breaks = "1 month", date_labels="%b")+
+#       theme_bw()+
+#       theme(axis.text.x=element_text(angle=45,hjust=1))+
+#       labs(x="",y="Mean Discharge at Yankee Fork Gaging Station")
+    
+    flo.plot <-  
+      ggplot()+
+      geom_rect(data=ice_runs,
+                aes(xmin=start_dummy,xmax=end_dummy,
+                    ymin=0,ymax=max(flow.dat$mean_discharge,na.rm=T),
+                    text=str_c("Ice")),
+                fill="lightblue",alpha=0.3,
+                inherit.aes = F)+
+      geom_line(data=flow.dat,
+                aes(x=dummy_date,y=mean_discharge,group=year,
+                    linetype=as.factor(year),
+                    text=str_c(" Date:",date,
                                "<br>","Mean Discharge (cfs): ",mean_discharge,
                                sep=" ")))+
+      scale_linetype_manual(values=c("dashed","solid"))+
       scale_x_date(date_breaks = "1 month", date_labels="%b")+
       theme_bw()+
-      theme(axis.text.x=element_text(angle=45,hjust=1))+
-      labs(x="",y="Mean Discharge at Yankee Fork Gaging Station")
+      labs(linetype="",x="",y="Mean Daily Discharge")
     
   })
   
