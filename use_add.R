@@ -67,7 +67,7 @@ use_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efe
   mutate(spawn_year=case_when(
     yday(observation_datetime)>=183 & species=="Steelhead" ~ observation_year+1,
     TRUE ~ observation_year
-  )) #|> 
+  )) |> 
   group_by(species) |> 
   mutate(most_recent=max(spawn_year,na.rm=T)) |> 
   filter(spawn_year==year(today()))
@@ -154,3 +154,74 @@ use_individuals.summary <- use_detections.dat |>
             length_mm=mean(length_mm,na.rm=T),
             release_lifestage=first(release_lifestage)) |>  
   left_join(use_dat.mark,by="pit_id") 
+
+if(nrow(use_individuals.summary)>0){
+  
+  
+  use_entry.summary <- use_individuals.summary |>  
+    mutate(use_entry_date=as_date(use_first))  |>  
+    group_by(use_entry_date,species)  |>  
+    summarise(n=n()) |>  
+    group_by(species) |>  
+    mutate(sy_total=sum(n),
+           cumulative_total=cumsum(n),
+           daily_prop=n/sy_total,
+           daily_cumulative=cumsum(daily_prop)) 
+}else{
+   use_entry.summary <-  tibble(use_entry_date=as_date(today()),
+                               species=c("Bull Trout","Chinook","Steelhead"),
+                               n=0,
+                               sy_total=0,
+                               cumulative_total=0,
+                               daily_prop=0,
+                               daily_cumulative=0) 
+  
+}
+
+species_max_dates <- tibble(
+  species=c("Bull Trout","Chinook","Steelhead"),
+  max_date=as.Date(c("1976-12-31","1976-12-31",
+                     "1976-12-31"))
+)
+
+use_complete_current <- use_entry.summary %>% 
+  filter(species %in% c("Bull Trout","Chinook",
+                        "Steelhead")) |> 
+  mutate(day_of_year=yday(use_entry_date),
+         dummy_date=case_when(
+           species=="Steelhead"&day_of_year<183 ~ as.Date(day_of_year,origin="1977-01-01"),
+           TRUE ~ as.Date(day_of_year-1,origin="1976-01-01")
+         )) |> 
+  left_join(species_max_dates,by="species") |> 
+  group_by(species) |> 
+  mutate(min_date=min(dummy_date,na.rm=T)) |> 
+  complete(dummy_date=seq(min(min_date), max(max_date), by="day")) |> 
+  ungroup() |> 
+  select(-c(min_date,max_date)) |> 
+  mutate(across(n,~replace_na(.x,0))) |> 
+  mutate(across(daily_prop,~replace_na(.x,0)))|> 
+  group_by(species) |> 
+  fill(c("sy_total",
+         "daily_cumulative"),.direction="down") |> 
+  mutate(daily_cumulative=cumsum(n))
+  
+library(ggplot2)
+
+
+comp_plot <-use_complete_current %>% 
+  ggplot(aes(x=dummy_date,y=daily_cumulative,
+             group=species))+
+  geom_line(aes(text=str_c(" Date:",format(dummy_date, "%b %d"),
+                           "<br>",
+                           "YTD Number Detected:",round(daily_cumulative),sep=" ")))+
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=45,hjust=1))+
+  scale_x_date(date_breaks="1 month", 
+               date_labels="%b")+
+  labs(x="Date to Yankee Fork Salmon River",
+       y="# PIT Tags Salmon River Array, Year-To-Date",
+       color="")
+comp_plot
+
+library(plotly)
+ggplotly(comp_plot,tooltip="text")

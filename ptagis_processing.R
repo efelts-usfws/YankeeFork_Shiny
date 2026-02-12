@@ -86,7 +86,7 @@ yfk_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efe
 
 # where were juveniles marked?
   
-  juv_mark.sum <- yfk_detections.dat |> 
+juv_mark.sum <- yfk_detections.dat |> 
     group_by(species,release_sitecode,
              release_year,release_lifestage) |> 
     tally()
@@ -440,4 +440,152 @@ run_stats <- alldaily |>
 saveRDS(run_stats,"data/run_stats")
 saveRDS(alldaily,"data/alldaily")
 saveRDS(projected_pts,"data/projections")
+
+# add USE array current year to track as well
+
+# read in data from web API where scheduled
+# query of the PIT tag array is stored
+
+use_detections.dat <- vroom(file = "https://api.ptagis.org/reporting/reports/efelts60/file/USE%20All.csv",
+                            delim = ",",
+                            locale = locale(encoding= "UTF-16LE")) %>% 
+  mutate(observation_sitecode=word(`Site`,1,sep=" "),
+         release_sitecode=word(`Release Site`,1,sep=" "),
+         observation_datetime=as.POSIXct(`Obs Time`,
+                                         format = "%m/%d/%Y %I:%M:%S %p", 
+                                         tz = "America/Los_Angeles"),
+         observation_month=month(observation_datetime),
+         observation_year=year(observation_datetime),
+         spawn_year=ifelse(observation_month>6,(observation_year+1),
+                           observation_year),
+         release_datetime=mdy(`Release Date`),
+         release_year=year(release_datetime),
+         yrs_at_large=observation_year-release_year,
+         species=`Species Name`) %>% 
+  select(pit_id=Tag,rear_type=`Rear Type Code`,
+         release_sitecode,release_lifestage=`Mark Life Stage`,
+         release_datetime,release_year,observation_sitecode,
+         observation_datetime,observation_month,
+         observation_year,yrs_at_large,spawn_year,
+         species,
+         length_mm=`Mark Length`) |> 
+  mutate(spawn_year=case_when(
+    yday(observation_datetime)>=183 & species=="Steelhead" ~ observation_year+1,
+    TRUE ~ observation_year
+  )) |> 
+  group_by(species) |> 
+  mutate(most_recent=max(spawn_year,na.rm=T)) |> 
+  filter(spawn_year==year(today()))
+
+
+# bring in query from API that searches for USE
+# fish detected downstream in the hydrosystem and
+# get their latest detection by PIT id; this gets
+# other marking sites besides YANKFK - already 
+# queried those previously in this script so run this
+# then bind with that query
+
+others_downstream_detections.dat <-  vroom(file = "https://api.ptagis.org/reporting/reports/efelts60/file/USE%20All%20Downstream.csv",
+                                           delim = ",",
+                                           locale = locale(encoding= "UTF-16LE")) |>  
+  mutate(observation_sitecode=word(`Site`,1,sep=" "),
+         release_sitecode=word(`Release Site`,1,sep=" "),
+         observation_datetime=as.POSIXct(`Obs Time`,
+                                         format = "%m/%d/%Y %I:%M:%S %p", 
+                                         tz = "America/Los_Angeles")) |> 
+  group_by(Tag) |> 
+  slice(which.max(observation_datetime)) |> 
+  select(pit_id=Tag,
+         latest_downstream=observation_datetime)
+
+# bind with the already run YANKFK query
+
+bind_downstream_detections.dat <-   bind_rows(others_downstream_detections.dat,
+                                              yfk_downstream_detections.dat)
+
+# pull out detections at USE that were marked as
+# juveniles and drop
+# any that don't appear in the downstream detections 
+# prior to their latest detection at the USE array
+
+use_juvenile.filter <- use_detections.dat %>% 
+  filter(release_lifestage=="Juvenile") |> 
+  group_by(pit_id) %>% 
+  slice(which.max(observation_datetime)) |> 
+  inner_join(bind_downstream_detections.dat,by="pit_id") |> 
+  filter(latest_downstream<observation_datetime)
+
+
+# now summarize relevant values and pull
+# in marking location as well
+
+use_dat.mark <- use_detections.dat  |>  
+  group_by(pit_id)  |> 
+  summarize(species=first(species),release_sitecode=first(release_sitecode),
+            release_datetime=first(release_datetime)) 
+
+
+use_individuals.summary <- use_detections.dat |> 
+  filter(pit_id %in% use_juvenile.filter$pit_id|
+           release_lifestage=="Adult"|
+           release_sitecode %in% c("LGRRBR","LGRRRR",
+                                   "SALTRP","SNKTRP")) |>  
+  group_by(pit_id)  |>  
+  summarize(use_first=first(observation_datetime),
+            use_final=last(observation_datetime),
+            use_diff=as.numeric(use_final-use_first,units="days"),
+            length_mm=mean(length_mm,na.rm=T),
+            release_lifestage=first(release_lifestage)) |>  
+  left_join(use_dat.mark,by="pit_id") 
+
+
+
+if(nrow(use_individuals.summary)>0){
+  
+  
+  use_entry.summary <- use_individuals.summary |>  
+    mutate(use_entry_date=as_date(use_first))  |>  
+    group_by(use_entry_date,species)  |>  
+    summarise(n=n()) |>  
+    group_by(species) |>  
+    mutate(sy_total=sum(n),
+           cumulative_total=cumsum(n),
+           daily_prop=n/sy_total,
+           daily_cumulative=cumsum(daily_prop)) 
+}else{
+  use_entry.summary <-  tibble(use_entry_date=as_date(today()),
+                               species=c("Bull Trout","Chinook","Steelhead"),
+                               n=0,
+                               sy_total=0,
+                               cumulative_total=0,
+                               daily_prop=0,
+                               daily_cumulative=0) 
+  
+}
+
+use_complete_current <- use_entry.summary %>% 
+  filter(species %in% c("Bull Trout","Chinook",
+                        "Steelhead")) |> 
+  mutate(day_of_year=yday(use_entry_date),
+         dummy_date=case_when(
+           species=="Steelhead"&day_of_year<183 ~ as.Date(day_of_year,origin="1977-01-01"),
+           TRUE ~ as.Date(day_of_year-1,origin="1976-01-01")
+         )) |> 
+  left_join(species_max_dates,by="species") |> 
+  group_by(species) |> 
+  mutate(min_date=min(dummy_date,na.rm=T)) |> 
+  complete(dummy_date=seq(min(min_date), max(max_date), by="day")) |> 
+  ungroup() |> 
+  select(-c(min_date,max_date)) |> 
+  mutate(across(n,~replace_na(.x,0))) |> 
+  mutate(across(daily_prop,~replace_na(.x,0)))|> 
+  group_by(species) |> 
+  fill(c("sy_total",
+         "daily_cumulative"),.direction="down") |> 
+  mutate(daily_cumulative=cumsum(n))
+
+saveRDS(use_complete_current,"data/use_complete_current")
+
+
+
 
